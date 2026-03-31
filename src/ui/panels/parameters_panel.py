@@ -5,7 +5,7 @@
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-    QLabel, QComboBox, QCheckBox
+    QLabel, QComboBox, QCheckBox, QSpinBox
 )
 from PyQt5.QtCore import pyqtSignal
 from i18n.translator import Translator
@@ -21,6 +21,7 @@ class ParametersPanel(QWidget):
     def __init__(self, translator: Translator, parent=None):
         super().__init__(parent)
         self.tr = translator
+        self.has_raw_files = True
         self._init_ui()
 
     def _init_ui(self):
@@ -78,10 +79,35 @@ class ParametersPanel(QWidget):
         self.combo_white_balance.addItems([
             self.tr.tr("wb_camera"),
             self.tr.tr("wb_daylight"),
-            self.tr.tr("wb_auto")
+            self.tr.tr("wb_auto"),
+            self.tr.tr("wb_manual"),
         ])
+        self.combo_white_balance.currentIndexChanged.connect(
+            self._on_white_balance_changed
+        )
         wb_layout.addWidget(self.combo_white_balance, 1)
         params_layout.addLayout(wb_layout)
+
+        # 手动色温（仅手动模式显示）
+        temperature_layout = QHBoxLayout()
+        self.label_color_temperature = QLabel(self.tr.tr("color_temperature"))
+        temperature_layout.addWidget(self.label_color_temperature)
+        self.spin_color_temperature = QSpinBox()
+        self.spin_color_temperature.setRange(2000, 10000)
+        self.spin_color_temperature.setSingleStep(100)
+        self.spin_color_temperature.setSuffix(" K")
+        self.spin_color_temperature.setValue(3800)
+        self.spin_color_temperature.setToolTip(
+            "仅对 RAW 文件生效\n"
+            "JPG/TIFF/PNG 不应用色温设置"
+        )
+        temperature_layout.addWidget(self.spin_color_temperature, 1)
+        params_layout.addLayout(temperature_layout)
+
+        self.label_color_temperature.hide()
+        self.spin_color_temperature.hide()
+        self.combo_white_balance.setCurrentIndex(3)
+        self._on_white_balance_changed(self.combo_white_balance.currentIndex())
 
         # 选项（间隔填充 + 两种延时视频，放在一行）
         options_layout = QHBoxLayout()
@@ -155,6 +181,28 @@ class ParametersPanel(QWidget):
         # 发射信号
         self.stack_mode_changed.emit(index)
 
+    def _on_white_balance_changed(self, index: int):
+        """白平衡改变时切换手动色温控件"""
+        is_manual = index == 3 and self.has_raw_files
+        self.label_color_temperature.setVisible(is_manual)
+        self.spin_color_temperature.setVisible(is_manual)
+        self.label_color_temperature.setEnabled(self.has_raw_files)
+        self.spin_color_temperature.setEnabled(self.has_raw_files)
+
+    def set_has_raw_files(self, has_raw_files: bool):
+        """根据当前文件类型更新手动色温控件状态"""
+        self.has_raw_files = has_raw_files
+
+        manual_index = 3
+        model_item = self.combo_white_balance.model().item(manual_index)
+        if model_item is not None:
+            model_item.setEnabled(has_raw_files)
+
+        if not has_raw_files and self.combo_white_balance.currentIndex() == manual_index:
+            self.combo_white_balance.setCurrentIndex(0)
+
+        self._on_white_balance_changed(self.combo_white_balance.currentIndex())
+
     def get_stack_mode(self) -> StackMode:
         """获取当前选择的堆栈模式"""
         mode_map = {
@@ -171,8 +219,13 @@ class ParametersPanel(QWidget):
             0: "camera",
             1: "daylight",
             2: "auto",
+            3: "manual",
         }
         return wb_map[self.combo_white_balance.currentIndex()]
+
+    def get_color_temperature(self) -> int:
+        """获取手动色温"""
+        return self.spin_color_temperature.value()
 
     def get_comet_fade_factor(self) -> float:
         """获取彗星尾巴衰减因子"""
@@ -197,7 +250,11 @@ class ParametersPanel(QWidget):
 
     def get_raw_params(self) -> dict:
         """获取 RAW 处理参数"""
-        return {
-            "use_camera_wb": self.get_white_balance() == "camera",
-            "use_auto_wb": self.get_white_balance() == "auto",
+        raw_params = {
+            "white_balance": self.get_white_balance(),
         }
+
+        if raw_params["white_balance"] == "manual" and self.has_raw_files:
+            raw_params["color_temperature"] = self.get_color_temperature()
+
+        return raw_params

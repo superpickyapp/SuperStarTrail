@@ -1,4 +1,4 @@
-彗星星轨 (SuperStarTrail) v0.5.0
+彗星星轨 (SuperStarTrail) v0.5.1
 一键生成星轨照片与延时视频
 
 ==================================================
@@ -41,7 +41,7 @@
 版权信息：
 
 Copyright © 2024-2025 James Photography
-版本：0.5.0
+版本：0.5.1
 网站：https://github.com/yourusername/SuperStarTrail
 电子邮件：James@jamesphotography.com.au
 

@@ -84,6 +84,15 @@ class ProcessThread(QThread):
 
         try:
             processor = RawProcessor()
+            contains_raw = any(processor.is_raw_file(path) for path in self.file_paths)
+            effective_white_balance = (
+                self.raw_params.get('white_balance', 'camera')
+                if contains_raw else 'source'
+            )
+            effective_color_temperature = (
+                self.raw_params.get('color_temperature')
+                if contains_raw else None
+            )
 
             # 确定输出目录（如果未指定，使用默认的"SuperStarTrail"子目录）
             from pathlib import Path
@@ -107,7 +116,8 @@ class ProcessThread(QThread):
                 video_filename = FileNamingService.generate_timelapse_filename(
                     file_paths=self.file_paths,
                     stack_mode=self.stack_mode,
-                    white_balance=self.raw_params.get('white_balance', 'camera'),
+                    white_balance=effective_white_balance,
+                    color_temperature=effective_color_temperature,
                     comet_fade_factor=self.comet_fade_factor if self.stack_mode == StackMode.COMET else None,
                     fps=self.video_fps
                 )
@@ -119,7 +129,12 @@ class ProcessThread(QThread):
             if self.enable_simple_timelapse:
                 from core.timelapse_generator import TimelapseGenerator
                 # 生成银河延时视频文件名
-                wb_str = self.raw_params.get('white_balance', 'camera').capitalize()
+                if effective_white_balance == 'manual':
+                    wb_str = f"{effective_color_temperature or 5500}K"
+                elif effective_white_balance == 'source':
+                    wb_str = "Source"
+                else:
+                    wb_str = effective_white_balance.capitalize()
                 milkyway_video_filename = f"MilkyWayTimelapse_{self.file_paths[0].stem}-{self.file_paths[-1].stem}_{wb_str}WB_{self.video_fps}FPS.mp4"
                 milkyway_timelapse_path = output_dir / milkyway_video_filename
                 milkyway_timelapse_generator = TimelapseGenerator(
@@ -157,7 +172,12 @@ class ProcessThread(QThread):
             self.log_message.emit("开始星轨合成")
             self.log_message.emit(f"文件数量: {total}")
             self.log_message.emit(f"堆栈模式: {mode_name}")
-            self.log_message.emit(f"白平衡: {self.raw_params.get('white_balance', 'camera')}")
+            wb_display = effective_white_balance
+            if wb_display == 'manual':
+                wb_display = f"manual ({effective_color_temperature or 5500}K)"
+            elif wb_display == 'source':
+                wb_display = "source (non-RAW files keep original colors)"
+            self.log_message.emit(f"白平衡: {wb_display}")
             self.log_message.emit(f"间隔填充: {'启用' if self.enable_gap_filling else '禁用'}")
             if self.enable_gap_filling:
                 self.log_message.emit(f"填充方法: {self.gap_fill_method}, 间隔大小: {self.gap_size}")
@@ -169,7 +189,7 @@ class ProcessThread(QThread):
             logger.info(f"开始星轨合成")
             logger.info(f"文件数量: {total}")
             logger.info(f"堆栈模式: {mode_name}")
-            logger.info(f"白平衡: {self.raw_params.get('white_balance', 'camera')}")
+            logger.info(f"白平衡: {wb_display}")
             logger.info(f"间隔填充: {'启用' if self.enable_gap_filling else '禁用'}")
             if self.enable_gap_filling:
                 logger.info(f"填充方法: {self.gap_fill_method}, 间隔大小: {self.gap_size}")
@@ -457,6 +477,11 @@ class MainWindow(QMainWindow):
         can_start = len(files) > 0
         self.control_panel.set_start_enabled(can_start)
 
+        # 纯 JPG/TIFF/PNG 文件夹时，禁用手动色温控件
+        all_files = self.file_list_panel.get_all_files()
+        has_raw_files = any(RawProcessor.is_raw_file(path) for path in all_files) if all_files else True
+        self.params_panel.set_has_raw_files(has_raw_files)
+
     def _preview_single_file(self, file_path: Path):
         """预览单个文件"""
         try:
@@ -626,7 +651,17 @@ class MainWindow(QMainWindow):
         return FileNamingService.generate_output_filename(
             file_paths=all_files,
             stack_mode=self.params_panel.get_stack_mode(),
-            white_balance=self.params_panel.get_white_balance(),
+            white_balance=(
+                self.params_panel.get_white_balance()
+                if any(RawProcessor.is_raw_file(path) for path in all_files)
+                else "source"
+            ),
+            color_temperature=(
+                self.params_panel.get_color_temperature()
+                if self.params_panel.get_white_balance() == "manual"
+                and any(RawProcessor.is_raw_file(path) for path in all_files)
+                else None
+            ),
             comet_fade_factor=self.params_panel.get_comet_fade_factor() 
                 if self.params_panel.get_stack_mode() == StackMode.COMET else None,
             enable_gap_filling=self.params_panel.is_gap_filling_enabled(),

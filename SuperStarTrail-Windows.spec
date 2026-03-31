@@ -60,8 +60,6 @@ a = Analysis(
         'core.stacking_engine',
         'core.exporter',
         'core.gap_filler',
-        'core.image_aligner',
-        'core.mask_utils',
         'core.timelapse_generator',
         'utils',
         'utils.logger',

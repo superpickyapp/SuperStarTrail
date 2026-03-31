@@ -5,8 +5,11 @@
 """
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
+
+APP_VERSION = "0.6.0-RC1"
 
 
 class Settings:
@@ -22,7 +25,8 @@ class Settings:
         # RAW 处理设置
         "raw": {
             "exposure_compensation": 0.0,
-            "white_balance": "auto",  # auto, camera, daylight, shade, tungsten
+            "white_balance": "manual",  # auto, camera, daylight, manual
+            "color_temperature": 3800,
             "denoise": False,
             "colorspace": "sRGB",  # sRGB, Adobe RGB, ProPhoto RGB
         },
@@ -69,13 +73,13 @@ class Settings:
                     saved_settings = json.load(f)
                 # 合并默认设置和保存的设置
                 settings = self._merge_settings(
-                    self.DEFAULT_SETTINGS.copy(), saved_settings
+                    deepcopy(self.DEFAULT_SETTINGS), saved_settings
                 )
                 return settings
             except Exception:
                 # 如果加载失败，返回默认设置
-                return self.DEFAULT_SETTINGS.copy()
-        return self.DEFAULT_SETTINGS.copy()
+                return deepcopy(self.DEFAULT_SETTINGS)
+        return deepcopy(self.DEFAULT_SETTINGS)
 
     def _merge_settings(
         self, default: Dict[str, Any], saved: Dict[str, Any]
@@ -117,7 +121,7 @@ class Settings:
 
     def reset_to_defaults(self):
         """重置为默认设置"""
-        self.settings = self.DEFAULT_SETTINGS.copy()
+        self.settings = deepcopy(self.DEFAULT_SETTINGS)
 
     # 便捷方法
     def get_video_fps(self) -> int:

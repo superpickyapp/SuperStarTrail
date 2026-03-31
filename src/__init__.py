@@ -2,6 +2,8 @@
 SuperStarTrail - 专业级星轨合成工具
 """
 
-__version__ = "0.1.0-alpha"
+from utils.settings import APP_VERSION
+
+__version__ = APP_VERSION
 __author__ = "James Zhenyu"
 __license__ = "MIT"

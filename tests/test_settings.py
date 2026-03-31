@@ -2,6 +2,7 @@
 Settings 模块测试
 """
 
+import copy
 import unittest
 import sys
 from pathlib import Path
@@ -28,6 +29,7 @@ class TestSettings(unittest.TestCase):
         # 修改设置文件路径为临时目录
         self.settings.settings_dir = self.temp_dir
         self.settings.settings_file = self.temp_dir / "test_config.json"
+        self.settings.settings = copy.deepcopy(Settings.DEFAULT_SETTINGS)
 
     def tearDown(self):
         """测试后清理"""
@@ -40,7 +42,7 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(self.settings.get_language(), "zh_CN")
 
         # 视频 FPS
-        self.assertEqual(self.settings.get_video_fps(), 30)
+        self.assertEqual(self.settings.get_video_fps(), 25)
 
         # 间隔填充方法
         self.assertEqual(self.settings.get_gap_fill_method(), "morphological")
@@ -120,6 +122,7 @@ class TestSettings(unittest.TestCase):
         settings = Settings()
         settings.settings_dir = self.temp_dir
         settings.settings_file = self.temp_dir / "test_config.json"
+        settings.settings = copy.deepcopy(Settings.DEFAULT_SETTINGS)
         settings.settings = settings._load_settings()
 
         # 应该使用默认值

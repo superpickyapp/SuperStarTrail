@@ -11,8 +11,10 @@ TRANSLATIONS = {
 
         # 文件选择区域
         "select_directory": "选择目录",
+        "select_output_directory": "选择输出目录",
         "selected_directory": "已选择目录",
         "no_directory_selected": "未选择目录",
+        "no_output_directory_selected": "未选择输出目录",
         "file_list": "文件列表",
         "drop_files_here": "拖放 RAW 文件到此处\n或点击上方按钮选择目录",
 
@@ -43,6 +45,8 @@ TRANSLATIONS = {
         "wb_camera": "相机",
         "wb_daylight": "日光",
         "wb_auto": "自动",
+        "wb_manual": "手动色温",
+        "color_temperature": "色温:",
 
         # 文件计数和目录
         "files_selected": "已选择 {count} 个文件",
@@ -219,7 +223,7 @@ TRANSLATIONS = {
   - 自定义：在设置中手动指定拉伸上下限<br>
 • <b>间隙填充</b>：使用形态学算法填补星轨间的断点，产生连续轨迹<br>
 • <b>延时视频</b>：生成展示星轨形成过程的视频（MP4格式）<br>
-• <b>白平衡</b>：选择相机、日光或自动白平衡""",
+• <b>白平衡</b>：选择相机、日光、自动或 RAW 手动色温""",
 
         "help_step4_title": "4. 选择输出目录（可选）",
         "help_step4_content": "点击「💾 输出目录」选择保存位置。<br>默认保存到：原片目录/StarTrail/",
@@ -249,8 +253,10 @@ TRANSLATIONS = {
 
         # File selection
         "select_directory": "Select Directory",
+        "select_output_directory": "Select Output Directory",
         "selected_directory": "Selected Directory",
         "no_directory_selected": "No Directory Selected",
+        "no_output_directory_selected": "No Output Directory Selected",
         "file_list": "File List",
         "drop_files_here": "Drop RAW files here\nor click button above to select directory",
 
@@ -281,6 +287,8 @@ TRANSLATIONS = {
         "wb_camera": "Camera",
         "wb_daylight": "Daylight",
         "wb_auto": "Auto",
+        "wb_manual": "Manual Temperature",
+        "color_temperature": "Temperature:",
 
         # File count and directories
         "files_selected": "{count} files selected",

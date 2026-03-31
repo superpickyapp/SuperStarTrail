@@ -57,7 +57,7 @@ class FileListPanel(QWidget):
 
         # 输出目录选择
         output_dir_layout = QHBoxLayout()
-        self.btn_select_output = QPushButton(f"💾 {self.tr.tr('select_directory')}")
+        self.btn_select_output = QPushButton(f"💾 {self.tr.tr('select_output_directory')}")
         self.btn_select_output.clicked.connect(self.select_output_dir)
         self.btn_select_output.setToolTip(
             self.tr.tr('tooltip_output_dir') if hasattr(self.tr, 'tr') else "Select output directory"
@@ -65,7 +65,7 @@ class FileListPanel(QWidget):
         self.btn_select_output.setStyleSheet(SECONDARY_BUTTON_STYLE)
         output_dir_layout.addWidget(self.btn_select_output)
 
-        self.label_output_dir = QLabel(self.tr.tr("no_directory_selected"))
+        self.label_output_dir = QLabel(self.tr.tr("no_output_directory_selected"))
         self.label_output_dir.setWordWrap(True)
         self.label_output_dir.setStyleSheet(INFO_LABEL_STYLE)
         output_dir_layout.addWidget(self.label_output_dir, 1)
@@ -178,7 +178,7 @@ class FileListPanel(QWidget):
         # 如果未设置输出目录，默认使用源文件夹下的 SuperStarTrail 子目录
         if not self.output_dir:
             self.output_dir = str(Path(folder) / "SuperStarTrail")
-            self.label_output_dir.setText(self.output_dir)
+            self._update_output_dir_label()
             self.output_dir_changed.emit(self.output_dir)
 
         # 发射信号
@@ -198,8 +198,19 @@ class FileListPanel(QWidget):
 
         if folder:
             self.output_dir = folder
-            self.label_output_dir.setText(self.output_dir)
+            self._update_output_dir_label()
             self.output_dir_changed.emit(self.output_dir)
+
+    def _update_output_dir_label(self):
+        """更新输出目录标签文本"""
+        if self.output_dir:
+            self.label_output_dir.setText(
+                self.tr.tr("output_to").format(path=self.output_dir)
+            )
+        else:
+            self.label_output_dir.setText(
+                self.tr.tr("no_output_directory_selected")
+            )
 
     def refresh_file_list(self):
         """刷新文件列表显示"""

@@ -12,7 +12,7 @@
 
 这将创建：
 - `dist/SuperStarTrail.app` - macOS 应用程序
-- `dist/SuperStarTrail-0.3.0.dmg` - DMG 安装包
+- `dist/SuperStarTrail-0.5.1.dmg` - DMG 安装包
 
 ### 完整打包（签名+公证）
 
@@ -96,7 +96,7 @@ codesign --verify --deep --strict --verbose=2 dist/SuperStarTrail.app
 spctl -a -vv dist/SuperStarTrail.app
 
 # 验证 DMG 装订
-xcrun stapler validate dist/SuperStarTrail-0.3.0.dmg
+xcrun stapler validate dist/SuperStarTrail-0.5.1.dmg
 ```
 
 ## 文件说明
@@ -111,7 +111,7 @@ xcrun stapler validate dist/SuperStarTrail-0.3.0.dmg
 
 - `build/` - PyInstaller 构建缓存
 - `dist/SuperStarTrail.app` - 打包的应用（326MB）
-- `dist/SuperStarTrail-0.3.0.dmg` - 安装包（136MB）
+- `dist/SuperStarTrail-0.5.1.dmg` - 安装包（136MB）
 
 ## 常见问题
 
@@ -176,17 +176,17 @@ lipo -create \
 open dist/SuperStarTrail.app
 
 # 挂载 DMG 测试
-open dist/SuperStarTrail-0.3.0.dmg
+open dist/SuperStarTrail-0.5.1.dmg
 ```
 
 ### 模拟首次下载
 
 ```bash
 # 添加隔离属性（模拟从网络下载）
-xattr -w com.apple.quarantine "0081;$(date +%s);Safari" dist/SuperStarTrail-0.3.0.dmg
+xattr -w com.apple.quarantine "0081;$(date +%s);Safari" dist/SuperStarTrail-0.5.1.dmg
 
 # 打开 DMG
-open dist/SuperStarTrail-0.3.0.dmg
+open dist/SuperStarTrail-0.5.1.dmg
 ```
 
 如果公证成功，macOS 会直接允许打开。如果未公证，会显示警告。
@@ -232,7 +232,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: SuperStarTrail-macOS
-          path: dist/SuperStarTrail-0.3.0.dmg
+          path: dist/SuperStarTrail-0.5.1.dmg
 ```
 
 ## 参考资料

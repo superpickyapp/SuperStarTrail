@@ -13,7 +13,7 @@
 
 **输出文件**:
 - `dist/SuperStarTrail.app` - macOS 应用
-- `dist/SuperStarTrail-0.3.0.dmg` - DMG 安装包
+- `dist/SuperStarTrail-0.5.1.dmg` - DMG 安装包
 
 **安装方式**:
 1. 打开 DMG 文件
@@ -128,7 +128,7 @@ create-dmg \
   --icon "SuperStarTrail.app" 200 190 \
   --hide-extension "SuperStarTrail.app" \
   --app-drop-link 600 185 \
-  "彗星星轨-0.4.0.dmg" \
+  "彗星星轨-0.5.1.dmg" \
   tmp_dmg
 
 # 清理
@@ -147,7 +147,7 @@ ln -s /Applications tmp_dmg/Applications
 hdiutil create -volname "彗星星轨" \
   -srcfolder tmp_dmg \
   -ov -format UDZO \
-  "彗星星轨-0.4.0.dmg"
+  "彗星星轨-0.5.1.dmg"
 
 # 清理
 rm -rf tmp_dmg
@@ -205,7 +205,13 @@ xcrun stapler validate dist/SuperStarTrail.app
 
 ## 📊 版本历史
 
-### v0.4.0 (当前版本)
+### v0.5.1 (当前版本)
+- ✨ JPEG 格式支持与 RAW+JPG 智能筛选
+- 🪟 修复 Windows 中文路径下延时视频生成问题
+- 📝 新增自动日志文件输出
+- 🔒 macOS 版本完成签名与公证流程
+
+### v0.4.0
 - ✨ 应用名称改为"彗星星轨"
 - ✨ 标题优化为"一键生成星轨照片与延时视频"
 - ✨ 银河延时视频功能（MilkyWayTimelapse）
@@ -257,7 +263,7 @@ export TEAM_ID="JWR6FDB52H"
 ### 测试 DMG
 
 ```bash
-open dist/SuperStarTrail-0.3.0.dmg
+open dist/SuperStarTrail-0.5.1.dmg
 ```
 
 ---
@@ -332,7 +338,7 @@ export TEAM_ID="..."
 ./build_and_sign.sh
 
 # 4. 测试 DMG
-open dist/彗星星轨-0.4.0.dmg
+open dist/彗星星轨-0.5.1.dmg
 
 # 5. 分发
 # 上传到网站或分享给用户
@@ -347,7 +353,7 @@ open dist/彗星星轨-0.4.0.dmg
 - **用途**: 可以直接运行或拖拽到 Applications
 - **大小**: 约 200-300 MB
 
-### dist/SuperStarTrail-0.4.0.dmg
+### dist/SuperStarTrail-0.5.1.dmg
 - **类型**: 磁盘映像
 - **用途**: 分发给用户的安装包
 - **大小**: 约 150-250 MB（压缩后）

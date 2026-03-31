@@ -34,6 +34,8 @@ class FileNamingService:
         "camera": "CameraWB",
         "daylight": "Daylight",
         "auto": "AutoWB",
+        "manual": "ManualWB",
+        "source": "SourceWB",
     }
 
     @staticmethod
@@ -75,6 +77,7 @@ class FileNamingService:
         file_paths: List[Path],
         stack_mode: StackMode,
         white_balance: str = "camera",
+        color_temperature: int = None,
         comet_fade_factor: float = None,
         enable_gap_filling: bool = False,
         file_extension: str = "tif"
@@ -106,7 +109,10 @@ class FileNamingService:
             tail_suffix = f"_{tail_name}"
 
         # 白平衡
-        wb_name = cls.WHITE_BALANCE_NAMES.get(white_balance, "CameraWB")
+        if white_balance == "manual" and color_temperature is not None:
+            wb_name = f"{color_temperature}K"
+        else:
+            wb_name = cls.WHITE_BALANCE_NAMES.get(white_balance, "CameraWB")
 
         # 间隙填充标记
         gap_suffix = "_GapFilled" if enable_gap_filling else ""
@@ -122,6 +128,7 @@ class FileNamingService:
         file_paths: List[Path],
         stack_mode: StackMode,
         white_balance: str = "camera",
+        color_temperature: int = None,
         comet_fade_factor: float = None,
         fps: int = 25,
         file_extension: str = "mp4"
@@ -153,7 +160,10 @@ class FileNamingService:
             tail_suffix = f"_{tail_name}"
 
         # 白平衡
-        wb_name = cls.WHITE_BALANCE_NAMES.get(white_balance, "CameraWB")
+        if white_balance == "manual" and color_temperature is not None:
+            wb_name = f"{color_temperature}K"
+        else:
+            wb_name = cls.WHITE_BALANCE_NAMES.get(white_balance, "CameraWB")
 
         # 组合文件名 (StarTrail_Timelapse 开头)
         filename = f"StarTrail_Timelapse_{range_str}_{mode_name}{tail_suffix}_{wb_name}_{fps}FPS.{file_extension}"

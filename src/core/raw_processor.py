@@ -10,6 +10,7 @@ RAW 图像处理模块
 
 from typing import Optional, Dict, Any
 from pathlib import Path
+import math
 import numpy as np
 import rawpy
 from PIL import Image
@@ -62,13 +63,45 @@ class RawProcessor:
         Returns:
             如果是支持的格式返回 True
         """
-        return file_path.suffix.lower() in RawProcessor.SUPPORTED_FORMATS
+        return file_path.suffix.lower() in RawProcessor.SUPPORTED_RAW_FORMATS
+
+    @staticmethod
+    def _kelvin_to_user_wb(color_temperature: int) -> list[float]:
+        """
+        将色温转换为 rawpy 可用的 user_wb 通道倍率。
+
+        rawpy 需要长度为 4 的通道倍率列表，这里使用近似的
+        Kelvin -> RGB 转换，并映射为 [R, G1, B, G2]。
+        """
+        temp = max(2000, min(10000, color_temperature)) / 100.0
+
+        if temp <= 66:
+            red = 255.0
+            green = 99.4708025861 * math.log(temp) - 161.1195681661
+            if temp <= 19:
+                blue = 0.0
+            else:
+                blue = 138.5177312231 * math.log(temp - 10) - 305.0447927307
+        else:
+            red = 329.698727446 * ((temp - 60) ** -0.1332047592)
+            green = 288.1221695283 * ((temp - 60) ** -0.0755148492)
+            blue = 255.0
+
+        red = max(0.0, min(255.0, red))
+        green = max(1.0, min(255.0, green))
+        blue = max(0.0, min(255.0, blue))
+
+        red_gain = red / green
+        blue_gain = blue / green
+
+        return [red_gain, 1.0, blue_gain, 1.0]
 
     def process(
         self,
         raw_path: Path,
         white_balance: str = "camera",
         exposure_compensation: float = 0.0,
+        color_temperature: Optional[int] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -77,8 +110,9 @@ class RawProcessor:
 
         Args:
             raw_path: 图像文件路径
-            white_balance: 白平衡模式 ('camera', 'daylight', 'auto') - 仅对 RAW 有效
+            white_balance: 白平衡模式 ('camera', 'daylight', 'auto', 'manual') - 仅对 RAW 有效
             exposure_compensation: 曝光补偿（-3.0 到 +3.0 EV） - 仅对 RAW 有效
+            color_temperature: 手动色温（Kelvin，仅 manual 模式有效）
             **kwargs: 其他 rawpy 参数
 
         Returns:
@@ -111,6 +145,12 @@ class RawProcessor:
             elif white_balance == "auto":
                 params["use_camera_wb"] = False
                 params["use_auto_wb"] = True
+            elif white_balance == "manual":
+                params["use_camera_wb"] = False
+                params["use_auto_wb"] = False
+                params["user_wb"] = self._kelvin_to_user_wb(
+                    color_temperature or 5500
+                )
 
             # 设置曝光补偿（2^EV）
             params["exp_shift"] = 2.0**exposure_compensation
@@ -122,6 +162,7 @@ class RawProcessor:
             return rgb
 
         # 如果是 TIFF、JPG、PNG 等格式，使用 PIL 读取
+        # 非 RAW 文件不应用白平衡或手动色温，保持源文件颜色。
         else:
             img = Image.open(raw_path)
 
