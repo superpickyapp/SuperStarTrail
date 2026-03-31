@@ -5,7 +5,8 @@
 
 # GUI 框架
 PyQt5==5.15.11
-PyQt5-Qt5==5.15.17
+PyQt5-Qt5==5.15.2; sys_platform == "win32"
+PyQt5-Qt5==5.15.17; sys_platform != "win32"
 PyQt5-sip==12.17.1
 
 # RAW 图像处理
@@ -29,4 +30,4 @@ llvmlite==0.44.0
 PyYAML==6.0.2
 
 # 其他运行时依赖
-packaging==24.3
+packaging==24.2
