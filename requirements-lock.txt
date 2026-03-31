@@ -24,7 +24,7 @@ tifffile==2025.10.4
 
 # 性能优化
 numba==0.62.1
-llvmlite==0.44.0
+llvmlite==0.45.0
 
 # 日志和配置
 PyYAML==6.0.2
