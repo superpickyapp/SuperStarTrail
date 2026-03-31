@@ -11,7 +11,11 @@ logger = setup_logger(__name__)
 from typing import List, Tuple, Optional
 import numpy as np
 from scipy import ndimage
-from numba import jit
+try:
+    from numba import jit
+except (ImportError, OSError):
+    def jit(*args, **kwargs):  # noqa: E306
+        return (lambda f: f) if not args else args[0] if callable(args[0]) else (lambda f: f)
 
 
 class GapFiller:

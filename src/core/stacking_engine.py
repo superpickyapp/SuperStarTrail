@@ -8,7 +8,11 @@ from enum import Enum
 from typing import List, Optional, Callable
 from pathlib import Path
 import numpy as np
-from numba import jit
+try:
+    from numba import jit
+except (ImportError, OSError):
+    def jit(*args, **kwargs):  # noqa: E306
+        return (lambda f: f) if not args else args[0] if callable(args[0]) else (lambda f: f)
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
