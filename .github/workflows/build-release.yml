@@ -13,13 +13,16 @@ on:
 jobs:
   build-windows-x64:
     runs-on: windows-latest
-    if: false  # temporarily disabled — llvmlite 0.45.0 DLL issue on Windows CI
     permissions:
       contents: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install Visual C++ Redistributable
+        shell: pwsh
+        run: choco install vcredist-all -y --no-progress
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -300,6 +303,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs:
+      - build-windows-x64
       - build-macos-arm64
     permissions:
       contents: write
