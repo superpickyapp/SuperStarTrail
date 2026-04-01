@@ -156,19 +156,18 @@ class ImageExporter:
             保存是否成功
         """
         try:
-            # PNG 支持 8-bit 和 16-bit
             if image.dtype == np.uint16:
-                # 保持 16-bit
-                img = Image.fromarray(image, mode="I;16")
+                # PIL 不支持多通道 uint16 PNG，使用 tifffile 保存
+                tifffile.imwrite(str(output_path), image, compression="zlib",
+                                 compressionargs={"level": compress_level})
             else:
                 img = Image.fromarray(image.astype(np.uint8))
-
-            img.save(output_path, "PNG", compress_level=compress_level)
+                img.save(output_path, "PNG", compress_level=compress_level)
 
             return True
 
         except Exception as e:
-            logger.info(f"保存 PNG 失败: {e}")
+            logger.error(f"保存 PNG 失败: {e}")
             return False
 
     @staticmethod
