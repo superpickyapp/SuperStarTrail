@@ -78,6 +78,7 @@ a = Analysis(
         'tensorflow',
         'matplotlib',
         'pandas',
+        'astropy',  # 仅用于预览拉伸增强，已有 fallback，不打包进二进制
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

@@ -29,8 +29,5 @@ llvmlite==0.45.0
 # 日志和配置
 PyYAML==6.0.2
 
-# 天文图像处理
-astropy==6.1.0
-
 # 其他运行时依赖
 packaging==24.2
