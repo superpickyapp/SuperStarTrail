@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
 
-APP_VERSION = "0.6.0-RC2"
+APP_VERSION = "0.6.0-RC3"
 
 
 class Settings:
