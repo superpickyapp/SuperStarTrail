@@ -39,6 +39,7 @@ class ProcessThread(QThread):
 
     progress = pyqtSignal(int, int)  # 当前, 总数
     finished = pyqtSignal(np.ndarray)  # 完成信号
+    cancelled = pyqtSignal()  # 用户取消信号
     error = pyqtSignal(str)  # 错误信号
     preview_update = pyqtSignal(np.ndarray)  # 预览更新
     status_message = pyqtSignal(str)  # 状态消息
@@ -364,6 +365,9 @@ class ProcessThread(QThread):
             import traceback
             traceback.print_exc()
             self.error.emit(str(e))
+        finally:
+            if self._stop_event.is_set():
+                self.cancelled.emit()
 
     def stop(self):
         """停止处理（线程安全）"""
@@ -556,6 +560,7 @@ class MainWindow(QMainWindow):
         self.process_thread.progress.connect(self.control_panel.update_progress)
         self.process_thread.preview_update.connect(self.preview_panel.update_preview)
         self.process_thread.finished.connect(self.processing_finished)
+        self.process_thread.cancelled.connect(self.processing_cancelled)
         self.process_thread.error.connect(self.processing_error)
         self.process_thread.status_message.connect(self.control_panel.update_status)
         self.process_thread.timelapse_generated.connect(self.on_timelapse_generated)
@@ -568,6 +573,12 @@ class MainWindow(QMainWindow):
         if self.process_thread:
             self.process_thread.stop()
             self.control_panel.set_stop_enabled(False)
+            self.control_panel.update_status("正在取消...")
+
+    def processing_cancelled(self):
+        """用户取消处理后恢复 UI 状态"""
+        self.control_panel.set_idle_state(can_start=True)
+        self.control_panel.update_status("已取消")
 
     def processing_finished(self, result: np.ndarray):
         """处理完成"""
