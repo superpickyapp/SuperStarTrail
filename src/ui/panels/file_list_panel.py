@@ -37,6 +37,7 @@ class FileListPanel(QWidget):
         self.raw_files: List[Path] = []  # 所有 RAW 文件
         self.excluded_files: set = set()  # 被排除的文件索引
         self.output_dir: Optional[str] = None  # 输出目录
+        self._output_dir_is_manual: bool = False  # 用户是否手动指定了输出目录
 
         self._init_ui()
 
@@ -209,8 +210,8 @@ class FileListPanel(QWidget):
         self.excluded_files.clear()  # 清空排除列表
         self.refresh_file_list()
 
-        # 如果未设置输出目录，默认使用源文件夹下的 SuperStarTrail 子目录
-        if not self.output_dir:
+        # 若用户未手动指定输出目录，每次切换源文件夹时自动跟随更新
+        if not self._output_dir_is_manual:
             self.output_dir = str(Path(folder) / "SuperStarTrail")
             self._update_output_dir_label()
             self.output_dir_changed.emit(self.output_dir)
@@ -236,6 +237,7 @@ class FileListPanel(QWidget):
 
         if folder:
             self.output_dir = folder
+            self._output_dir_is_manual = True
             self._update_output_dir_label()
             self.output_dir_changed.emit(self.output_dir)
 
