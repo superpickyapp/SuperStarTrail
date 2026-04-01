@@ -233,7 +233,7 @@ class FileListPanel(QWidget):
         if excluded_count > 0:
             count_text = self.tr.tr("files_selected_with_excluded").format(
                 count=valid_count,
-                total=total_files,
+                active=valid_count,
                 excluded=excluded_count
             ) if hasattr(self.tr, 'tr') else f"已选择 {valid_count}/{total_files} 个文件（{excluded_count} 个已排除）"
         else:

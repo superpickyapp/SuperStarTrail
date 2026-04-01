@@ -160,7 +160,7 @@ class PreviewPanel(QWidget):
         # 转换为 QPixmap
         h, w, c = img_8bit.shape
         bytes_per_line = c * w
-        q_img = QImage(img_8bit.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        q_img = QImage(bytes(img_8bit.tobytes()), w, h, bytes_per_line, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(q_img)
 
         # 缩放到 label 大小，保持宽高比

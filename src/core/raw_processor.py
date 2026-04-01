@@ -1,12 +1,12 @@
 """
-from utils.logger import setup_logger
-
-logger = setup_logger(__name__)
-
 RAW 图像处理模块
 
 负责读取和处理各种相机的 RAW 格式文件
 """
+
+from utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 from typing import Optional, Dict, Any
 from pathlib import Path
