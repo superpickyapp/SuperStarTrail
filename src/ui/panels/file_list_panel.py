@@ -8,7 +8,7 @@ from typing import List, Callable, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QPushButton, QLabel, QListWidget, QFileDialog,
-    QMenu, QMessageBox
+    QMenu, QMessageBox, QToolButton
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from i18n.translator import Translator
@@ -17,6 +17,7 @@ from ui.styles import (
     SECONDARY_BUTTON_STYLE,
     INFO_LABEL_STYLE,
 )
+from utils.settings import get_settings
 
 
 class FileListPanel(QWidget):
@@ -48,12 +49,26 @@ class FileListPanel(QWidget):
         file_group = QGroupBox(self.tr.tr("file_list"))
         file_layout = QVBoxLayout()
 
-        # 文件选择按钮
+        # 文件选择按钮 + 最近目录按钮
+        folder_btn_layout = QHBoxLayout()
+
         self.btn_select_folder = QPushButton(f"📁 {self.tr.tr('select_directory')}")
         self.btn_select_folder.clicked.connect(self.select_folder)
         self.btn_select_folder.setToolTip(self.tr.tr('tooltip_select_folder'))
         self.btn_select_folder.setStyleSheet(PRIMARY_BUTTON_STYLE)
-        file_layout.addWidget(self.btn_select_folder)
+        folder_btn_layout.addWidget(self.btn_select_folder, 1)
+
+        self.btn_recent_dirs = QToolButton()
+        self.btn_recent_dirs.setText("🕒")
+        self.btn_recent_dirs.setToolTip("最近使用的目录")
+        self.btn_recent_dirs.setPopupMode(QToolButton.InstantPopup)
+        self.btn_recent_dirs.setStyleSheet(SECONDARY_BUTTON_STYLE + "padding: 6px 10px;")
+        self._recent_menu = QMenu(self)
+        self.btn_recent_dirs.setMenu(self._recent_menu)
+        self._refresh_recent_menu()
+        folder_btn_layout.addWidget(self.btn_recent_dirs)
+
+        file_layout.addLayout(folder_btn_layout)
 
         # 输出目录选择
         output_dir_layout = QHBoxLayout()
@@ -95,12 +110,31 @@ class FileListPanel(QWidget):
         file_group.setLayout(file_layout)
         layout.addWidget(file_group)
 
+    def _refresh_recent_menu(self):
+        """刷新最近目录菜单"""
+        self._recent_menu.clear()
+        recent_dirs = get_settings().get_recent_dirs()
+        # 过滤掉不存在的目录
+        recent_dirs = [d for d in recent_dirs if Path(d).exists()]
+        if not recent_dirs:
+            action = self._recent_menu.addAction("暂无最近目录")
+            action.setEnabled(False)
+        else:
+            for path in recent_dirs:
+                display = Path(path).name or path
+                action = self._recent_menu.addAction(f"📁  {display}")
+                action.setToolTip(path)
+                action.triggered.connect(lambda checked, p=path: self._load_folder(p))
+
     def select_folder(self):
         """选择包含图片文件的文件夹"""
         folder = QFileDialog.getExistingDirectory(self, self.tr.tr("select_directory"))
         if not folder:
             return
-            
+        self._load_folder(folder)
+
+    def _load_folder(self, folder: str):
+        """从指定路径加载图片文件"""
         folder_path = Path(folder)
         
         # 定义支持的扩展名
@@ -180,6 +214,10 @@ class FileListPanel(QWidget):
             self.output_dir = str(Path(folder) / "SuperStarTrail")
             self._update_output_dir_label()
             self.output_dir_changed.emit(self.output_dir)
+
+        # 保存到最近目录并刷新菜单
+        get_settings().add_recent_dir(str(folder))
+        self._refresh_recent_menu()
 
         # 发射信号
         self.files_selected.emit(self.get_files_to_process())

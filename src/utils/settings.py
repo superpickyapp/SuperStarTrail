@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
 
-APP_VERSION = "0.6.0-RC1"
+APP_VERSION = "0.6.0-RC2"
 
 
 class Settings:
@@ -21,12 +21,11 @@ class Settings:
             "use_default_output_dir": True,
             "auto_save_preview": False,
             "language": "zh_CN",
+            "recent_dirs": [],
         },
         # RAW 处理设置
         "raw": {
             "exposure_compensation": 0.0,
-            "white_balance": "manual",  # auto, camera, daylight, manual
-            "color_temperature": 3800,
             "denoise": False,
             "colorspace": "sRGB",  # sRGB, Adobe RGB, ProPhoto RGB
         },
@@ -144,10 +143,6 @@ class Settings:
         """获取曝光补偿"""
         return self.get("raw", "exposure_compensation", 0.0)
 
-    def get_white_balance(self) -> str:
-        """获取白平衡"""
-        return self.get("raw", "white_balance", "auto")
-
     def get_language(self) -> str:
         """获取语言设置"""
         return self.get("general", "language", "zh_CN")
@@ -178,6 +173,19 @@ class Settings:
         low = self.get("preview", "percentile_low", 1.0)
         high = self.get("preview", "percentile_high", 99.5)
         return (low, high)
+
+    def get_recent_dirs(self) -> list:
+        """获取最近使用的目录列表"""
+        return self.get("general", "recent_dirs", [])
+
+    def add_recent_dir(self, path: str) -> None:
+        """添加最近使用的目录（最多保留10条，自动去重）"""
+        recent = self.get_recent_dirs()
+        if path in recent:
+            recent.remove(path)
+        recent.insert(0, path)
+        self.set("general", "recent_dirs", recent[:10])
+        self.save_settings()
 
     def get_video_resolution(self) -> tuple:
         """获取视频分辨率"""

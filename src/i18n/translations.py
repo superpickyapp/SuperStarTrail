@@ -23,8 +23,8 @@ TRANSLATIONS = {
         "stack_mode": "堆栈模式:",
         "mode_lighten": "Lighten (星轨)",
         "mode_comet": "Comet (彗星)",
-        "mode_average": "Average (降噪)",
-        "mode_darken": "Darken (去光污)",
+        "mode_average": "降噪叠加",
+        "mode_darken": "地景提取",
 
         "comet_tail": "尾巴长度:",
         "tail_short": "短",
@@ -265,8 +265,8 @@ TRANSLATIONS = {
         "stack_mode": "Stack Mode:",
         "mode_lighten": "Lighten (Star Trail)",
         "mode_comet": "Comet",
-        "mode_average": "Average (Denoise)",
-        "mode_darken": "Darken (Light Pollution)",
+        "mode_average": "Denoise Stack",
+        "mode_darken": "Landscape Extract",
 
         "comet_tail": "Tail Length:",
         "tail_short": "Short",

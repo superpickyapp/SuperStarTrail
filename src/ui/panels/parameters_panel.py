@@ -1,11 +1,11 @@
 """
 参数设置面板
-负责堆栈模式、白平衡、间隔填充和延时视频参数的设置
+负责堆栈模式、间隔填充和延时视频参数的设置
 """
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
-    QLabel, QComboBox, QCheckBox, QSpinBox
+    QLabel, QComboBox, QCheckBox
 )
 from PyQt5.QtCore import pyqtSignal
 from i18n.translator import Translator
@@ -21,7 +21,6 @@ class ParametersPanel(QWidget):
     def __init__(self, translator: Translator, parent=None):
         super().__init__(parent)
         self.tr = translator
-        self.has_raw_files = True
         self._init_ui()
 
     def _init_ui(self):
@@ -37,13 +36,28 @@ class ParametersPanel(QWidget):
         mode_layout = QHBoxLayout()
         mode_layout.addWidget(QLabel(self.tr.tr("stack_mode")))
         self.combo_stack_mode = QComboBox()
-        self.combo_stack_mode.addItems([
-            self.tr.tr("mode_lighten"),
-            self.tr.tr("mode_comet"),
-            self.tr.tr("mode_average"),
-            self.tr.tr("mode_darken"),
-        ])
-        self.combo_stack_mode.setCurrentIndex(0)  # 默认选择传统星轨
+        _mode_items = [
+            (self.tr.tr("mode_lighten"),
+             "逐帧取最亮像素，星星运动轨迹叠加为连续光弧\n"
+             "适合：经典星轨摄影，曝光时间越长星弧越长"),
+            (self.tr.tr("mode_comet"),
+             "亮度随时间衰减，产生由亮到暗的渐变尾迹\n"
+             "适合：彗星感星轨、银河旋转动态感"),
+            (self.tr.tr("mode_average"),
+             "对所有帧取平均值，随机噪点相互抵消\n"
+             "适合：用多张短曝光合成低噪单张、制作暗帧校准文件\n"
+             "注意：星星会因位移而消失，不产生星轨"),
+            (self.tr.tr("mode_darken"),
+             "逐帧取最暗像素，消除一切移动的亮点\n"
+             "适合：提取无星干净地景背景板、去除偶发车灯/路灯\n"
+             "注意：所有星星都会被去除，仅保留固定背景"),
+        ]
+        for text, tip in _mode_items:
+            self.combo_stack_mode.addItem(text)
+            self.combo_stack_mode.setItemData(
+                self.combo_stack_mode.count() - 1, tip, 3  # Qt.ToolTipRole = 3
+            )
+        self.combo_stack_mode.setCurrentIndex(0)  # 默认选择星轨模式
         self.combo_stack_mode.currentIndexChanged.connect(self._on_stack_mode_changed)
         mode_layout.addWidget(self.combo_stack_mode, 1)
         params_layout.addLayout(mode_layout)
@@ -71,43 +85,6 @@ class ParametersPanel(QWidget):
         # 默认隐藏彗星选项（因为默认模式是传统星轨）
         self.label_comet_tail.hide()
         self.combo_comet_tail.hide()
-
-        # 白平衡选择
-        wb_layout = QHBoxLayout()
-        wb_layout.addWidget(QLabel(self.tr.tr("white_balance")))
-        self.combo_white_balance = QComboBox()
-        self.combo_white_balance.addItems([
-            self.tr.tr("wb_camera"),
-            self.tr.tr("wb_daylight"),
-            self.tr.tr("wb_auto"),
-            self.tr.tr("wb_manual"),
-        ])
-        self.combo_white_balance.currentIndexChanged.connect(
-            self._on_white_balance_changed
-        )
-        wb_layout.addWidget(self.combo_white_balance, 1)
-        params_layout.addLayout(wb_layout)
-
-        # 手动色温（仅手动模式显示）
-        temperature_layout = QHBoxLayout()
-        self.label_color_temperature = QLabel(self.tr.tr("color_temperature"))
-        temperature_layout.addWidget(self.label_color_temperature)
-        self.spin_color_temperature = QSpinBox()
-        self.spin_color_temperature.setRange(2000, 10000)
-        self.spin_color_temperature.setSingleStep(100)
-        self.spin_color_temperature.setSuffix(" K")
-        self.spin_color_temperature.setValue(3800)
-        self.spin_color_temperature.setToolTip(
-            "仅对 RAW 文件生效\n"
-            "JPG/TIFF/PNG 不应用色温设置"
-        )
-        temperature_layout.addWidget(self.spin_color_temperature, 1)
-        params_layout.addLayout(temperature_layout)
-
-        self.label_color_temperature.hide()
-        self.spin_color_temperature.hide()
-        self.combo_white_balance.setCurrentIndex(3)
-        self._on_white_balance_changed(self.combo_white_balance.currentIndex())
 
         # 选项（间隔填充 + 两种延时视频，放在一行）
         options_layout = QHBoxLayout()
@@ -137,8 +114,7 @@ class ParametersPanel(QWidget):
             "100张图片 ≈ 4秒视频\n"
             "额外处理时间：约 1-2 分钟"
         )
-        self.check_enable_timelapse.setChecked(True)  # 默认开启
-        self.check_enable_timelapse.setText("✅ 星轨延时")  # 设置初始文本
+        self.check_enable_timelapse.setChecked(False)  # 默认关闭
         self.check_enable_timelapse.stateChanged.connect(
             lambda state: self.check_enable_timelapse.setText(
                 "✅ 星轨延时" if state else "星轨延时"
@@ -156,8 +132,7 @@ class ParametersPanel(QWidget):
             "100张图片 ≈ 4秒视频\n"
             "适合展示银河移动、天空运动、云层变化等"
         )
-        self.check_enable_simple_timelapse.setChecked(True)  # 默认开启
-        self.check_enable_simple_timelapse.setText("✅ 银河延时")  # 设置初始文本
+        self.check_enable_simple_timelapse.setChecked(False)  # 默认关闭
         self.check_enable_simple_timelapse.stateChanged.connect(
             lambda state: self.check_enable_simple_timelapse.setText(
                 "✅ 银河延时" if state else "银河延时"
@@ -181,28 +156,6 @@ class ParametersPanel(QWidget):
         # 发射信号
         self.stack_mode_changed.emit(index)
 
-    def _on_white_balance_changed(self, index: int):
-        """白平衡改变时切换手动色温控件"""
-        is_manual = index == 3 and self.has_raw_files
-        self.label_color_temperature.setVisible(is_manual)
-        self.spin_color_temperature.setVisible(is_manual)
-        self.label_color_temperature.setEnabled(self.has_raw_files)
-        self.spin_color_temperature.setEnabled(self.has_raw_files)
-
-    def set_has_raw_files(self, has_raw_files: bool):
-        """根据当前文件类型更新手动色温控件状态"""
-        self.has_raw_files = has_raw_files
-
-        manual_index = 3
-        model_item = self.combo_white_balance.model().item(manual_index)
-        if model_item is not None:
-            model_item.setEnabled(has_raw_files)
-
-        if not has_raw_files and self.combo_white_balance.currentIndex() == manual_index:
-            self.combo_white_balance.setCurrentIndex(0)
-
-        self._on_white_balance_changed(self.combo_white_balance.currentIndex())
-
     def get_stack_mode(self) -> StackMode:
         """获取当前选择的堆栈模式"""
         mode_map = {
@@ -212,20 +165,6 @@ class ParametersPanel(QWidget):
             3: StackMode.DARKEN,
         }
         return mode_map[self.combo_stack_mode.currentIndex()]
-
-    def get_white_balance(self) -> str:
-        """获取白平衡参数"""
-        wb_map = {
-            0: "camera",
-            1: "daylight",
-            2: "auto",
-            3: "manual",
-        }
-        return wb_map[self.combo_white_balance.currentIndex()]
-
-    def get_color_temperature(self) -> int:
-        """获取手动色温"""
-        return self.spin_color_temperature.value()
 
     def get_comet_fade_factor(self) -> float:
         """获取彗星尾巴衰减因子"""
@@ -248,13 +187,4 @@ class ParametersPanel(QWidget):
         """是否启用普通延时视频"""
         return self.check_enable_simple_timelapse.isChecked()
 
-    def get_raw_params(self) -> dict:
-        """获取 RAW 处理参数"""
-        raw_params = {
-            "white_balance": self.get_white_balance(),
-        }
 
-        if raw_params["white_balance"] == "manual" and self.has_raw_files:
-            raw_params["color_temperature"] = self.get_color_temperature()
-
-        return raw_params

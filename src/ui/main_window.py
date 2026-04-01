@@ -34,6 +34,49 @@ from ui.styles import get_complete_stylesheet
 logger = setup_logger(__name__)
 
 
+class PreviewThread(QThread):
+    """单文件预览线程 —— 避免 RAW 解码阻塞主线程（C6）"""
+
+    preview_ready = pyqtSignal(np.ndarray, object)  # (image, file_path)
+    preview_error = pyqtSignal(str, object)          # (error_msg, file_path)
+
+    def __init__(self, file_path: Path, raw_params: dict):
+        super().__init__()
+        self.file_path = file_path
+        self.raw_params = raw_params
+
+    def run(self):
+        try:
+            from core.raw_processor import RawProcessor
+            processor = RawProcessor()
+            img = processor.process(
+                self.file_path, apply_exif_rotation=True, **self.raw_params
+            )
+            self.preview_ready.emit(img, self.file_path)
+        except Exception as e:
+            self.preview_error.emit(str(e), self.file_path)
+
+
+class SaveThread(QThread):
+    """TIFF 保存线程 —— 避免大文件写入阻塞主线程（C7）"""
+
+    save_finished = pyqtSignal(bool, str)  # (success, filename)
+
+    def __init__(self, image: np.ndarray, output_path: Path):
+        super().__init__()
+        self.image = image
+        self.output_path = output_path
+
+    def run(self):
+        try:
+            from core.exporter import ImageExporter
+            success = ImageExporter().save_auto(self.image, self.output_path)
+            self.save_finished.emit(success, self.output_path.name)
+        except Exception as e:
+            logger.error(f"SaveThread 保存失败: {e}")
+            self.save_finished.emit(False, self.output_path.name)
+
+
 class ProcessThread(QThread):
     """处理线程，避免阻塞 UI"""
 
@@ -60,6 +103,7 @@ class ProcessThread(QThread):
         output_dir: Path = None,
         video_fps: int = 30,
         translator = None,
+        enable_satellite_removal: bool = False,
     ):
         super().__init__()
         self.file_paths = file_paths
@@ -74,6 +118,7 @@ class ProcessThread(QThread):
         self.output_dir = output_dir
         self.translator = translator
         self.video_fps = video_fps
+        self.enable_satellite_removal = enable_satellite_removal
         self._stop_event = Event()  # 使用线程安全的 Event 替代布尔标志
 
     def run(self):
@@ -85,15 +130,6 @@ class ProcessThread(QThread):
 
         try:
             processor = RawProcessor()
-            contains_raw = any(processor.is_raw_file(path) for path in self.file_paths)
-            effective_white_balance = (
-                self.raw_params.get('white_balance', 'camera')
-                if contains_raw else 'source'
-            )
-            effective_color_temperature = (
-                self.raw_params.get('color_temperature')
-                if contains_raw else None
-            )
 
             # 确定输出目录（如果未指定，使用默认的"SuperStarTrail"子目录）
             from pathlib import Path
@@ -117,8 +153,6 @@ class ProcessThread(QThread):
                 video_filename = FileNamingService.generate_timelapse_filename(
                     file_paths=self.file_paths,
                     stack_mode=self.stack_mode,
-                    white_balance=effective_white_balance,
-                    color_temperature=effective_color_temperature,
                     comet_fade_factor=self.comet_fade_factor if self.stack_mode == StackMode.COMET else None,
                     fps=self.video_fps
                 )
@@ -129,14 +163,7 @@ class ProcessThread(QThread):
             milkyway_timelapse_path = None
             if self.enable_simple_timelapse:
                 from core.timelapse_generator import TimelapseGenerator
-                # 生成银河延时视频文件名
-                if effective_white_balance == 'manual':
-                    wb_str = f"{effective_color_temperature or 5500}K"
-                elif effective_white_balance == 'source':
-                    wb_str = "Source"
-                else:
-                    wb_str = effective_white_balance.capitalize()
-                milkyway_video_filename = f"MilkyWayTimelapse_{self.file_paths[0].stem}-{self.file_paths[-1].stem}_{wb_str}WB_{self.video_fps}FPS.mp4"
+                milkyway_video_filename = f"MilkyWayTimelapse_{self.file_paths[0].stem}-{self.file_paths[-1].stem}_{self.video_fps}FPS.mp4"
                 milkyway_timelapse_path = output_dir / milkyway_video_filename
                 milkyway_timelapse_generator = TimelapseGenerator(
                     output_path=milkyway_timelapse_path,
@@ -173,15 +200,11 @@ class ProcessThread(QThread):
             self.log_message.emit("开始星轨合成")
             self.log_message.emit(f"文件数量: {total}")
             self.log_message.emit(f"堆栈模式: {mode_name}")
-            wb_display = effective_white_balance
-            if wb_display == 'manual':
-                wb_display = f"manual ({effective_color_temperature or 5500}K)"
-            elif wb_display == 'source':
-                wb_display = "source (non-RAW files keep original colors)"
-            self.log_message.emit(f"白平衡: {wb_display}")
+            self.log_message.emit("白平衡: 相机白平衡")
             self.log_message.emit(f"间隔填充: {'启用' if self.enable_gap_filling else '禁用'}")
             if self.enable_gap_filling:
                 self.log_message.emit(f"填充方法: {self.gap_fill_method}, 间隔大小: {self.gap_size}")
+            self.log_message.emit(f"去卫星划痕: {'启用 (Hough 直线检测)' if self.enable_satellite_removal else '禁用'}")
             self.log_message.emit(f"星轨延时: {'启用 (4K ' + str(self.video_fps) + 'FPS)' if self.enable_timelapse else '禁用'}")
             self.log_message.emit(f"银河延时: {'启用 (4K ' + str(self.video_fps) + 'FPS)' if self.enable_simple_timelapse else '禁用'}")
             self.log_message.emit("=" * 60)
@@ -190,7 +213,7 @@ class ProcessThread(QThread):
             logger.info(f"开始星轨合成")
             logger.info(f"文件数量: {total}")
             logger.info(f"堆栈模式: {mode_name}")
-            logger.info(f"白平衡: {wb_display}")
+            logger.info("白平衡: 相机白平衡")
             logger.info(f"间隔填充: {'启用' if self.enable_gap_filling else '禁用'}")
             if self.enable_gap_filling:
                 logger.info(f"填充方法: {self.gap_fill_method}, 间隔大小: {self.gap_size}")
@@ -201,6 +224,13 @@ class ProcessThread(QThread):
 
             start_time = time.time()
             failed_files = []  # 记录失败的文件
+            satellite_removed_count = 0  # 统计检测到划痕的帧数
+
+            # 初始化划痕检测器（如果启用）
+            sat_filter = None
+            if self.enable_satellite_removal:
+                from core.satellite_filter import SatelliteFilter
+                sat_filter = SatelliteFilter()
 
             for i, path in enumerate(self.file_paths):
                 if self._stop_event.is_set():
@@ -221,8 +251,18 @@ class ProcessThread(QThread):
                     if milkyway_timelapse_generator:
                         milkyway_timelapse_generator.add_frame(img)
 
-                    # 添加到堆栈
-                    engine.add_image(img)
+                    # 划痕检测（如果启用）
+                    satellite_mask = None
+                    if sat_filter is not None:
+                        satellite_mask = sat_filter.detect_streaks(img)
+                        if satellite_mask.any():
+                            satellite_removed_count += 1
+                            log_msg = f"[{i+1:3d}/{total}] 🛸 检测到划痕，已遮罩 {satellite_mask.sum():,} 像素"
+                            logger.info(log_msg)
+                            self.log_message.emit(log_msg)
+
+                    # 添加到堆栈（传入遮罩）
+                    engine.add_image(img, satellite_mask=satellite_mask)
 
                     file_duration = time.time() - file_start
                     log_msg = f"[{i+1:3d}/{total}] 完成: {path.name} ({file_duration:.2f}秒)"
@@ -269,6 +309,10 @@ class ProcessThread(QThread):
                 self.log_message.emit("-" * 60)
                 self.log_message.emit("✅ 堆栈完成!")
                 self.log_message.emit(f"总耗时: {total_duration:.2f} 秒")
+                if self.enable_satellite_removal:
+                    self.log_message.emit(
+                        f"🛸 共检测到划痕帧: {satellite_removed_count}/{total} 张"
+                    )
                 self.log_message.emit(f"平均速度: {total_duration/total:.2f} 秒/张")
 
                 logger.info(f"-" * 60)
@@ -410,6 +454,10 @@ class MainWindow(QMainWindow):
         self.result_image: np.ndarray = None
         self.process_thread: ProcessThread = None
         self.timelapse_video_path: Path = None
+        self._current_preview_file: Path = None  # 当前预览的文件（用于实时WB更新）
+        self._preview_thread: PreviewThread = None  # C6: 预览子线程
+        self._save_thread: SaveThread = None        # C7: 保存子线程
+        self._pending_save_output_dir: Path = None  # C7: 保存完成后用于弹窗
 
         # 初始化 UI
         self.init_ui()
@@ -477,35 +525,42 @@ class MainWindow(QMainWindow):
 
     def _on_files_selected(self, files: List[Path]):
         """文件列表改变时的处理"""
-        # 根据文件列表更新开始按钮状态
         can_start = len(files) > 0
         self.control_panel.set_start_enabled(can_start)
 
-        # 纯 JPG/TIFF/PNG 文件夹时，禁用手动色温控件
-        all_files = self.file_list_panel.get_all_files()
-        has_raw_files = any(RawProcessor.is_raw_file(path) for path in all_files) if all_files else True
-        self.params_panel.set_has_raw_files(has_raw_files)
-
     def _preview_single_file(self, file_path: Path):
-        """预览单个文件"""
-        try:
-            from core.raw_processor import RawProcessor
-            processor = RawProcessor()
+        """预览单个文件（异步，不阻塞主线程）"""
+        self._current_preview_file = file_path
+        self.preview_panel.reset_preview_cache()
 
-            # 使用当前的 RAW 参数
-            raw_params = self.params_panel.get_raw_params()
-            img = processor.process(file_path, **raw_params)
+        # 若上一个预览线程仍在运行，断开其信号（结果将被丢弃）
+        if self._preview_thread is not None and self._preview_thread.isRunning():
+            self._preview_thread.preview_ready.disconnect()
+            self._preview_thread.preview_error.disconnect()
 
-            # 更新预览
-            self.preview_panel.update_preview(img)
-            logger.info(f"预览文件: {file_path.name}")
-        except Exception as e:
-            logger.error(f"预览失败: {e}")
-            QMessageBox.warning(
-                self,
-                self.tr.tr("warning") if hasattr(self.tr, 'tr') else "警告",
-                f"无法预览文件: {file_path.name}\n错误: {str(e)}"
-            )
+        self._preview_thread = PreviewThread(file_path, {})
+        self._preview_thread.preview_ready.connect(self._on_preview_ready)
+        self._preview_thread.preview_error.connect(self._on_preview_error)
+        self._preview_thread.start()
+
+    def _on_preview_ready(self, img: np.ndarray, file_path: Path):
+        """预览线程完成回调"""
+        # 若用户已切换到其他文件，忽略过期结果
+        if file_path != self._current_preview_file:
+            return
+        self.preview_panel.update_preview(img)
+        logger.info(f"预览文件: {file_path.name}")
+
+    def _on_preview_error(self, error_msg: str, file_path: Path):
+        """预览线程出错回调"""
+        if file_path != self._current_preview_file:
+            return
+        logger.error(f"预览失败: {error_msg}")
+        QMessageBox.warning(
+            self,
+            self.tr.tr("warning") if hasattr(self.tr, 'tr') else "警告",
+            f"无法预览文件: {file_path.name}\n错误: {error_msg}"
+        )
 
     def start_processing(self):
         """开始处理"""
@@ -544,7 +599,7 @@ class MainWindow(QMainWindow):
         self.process_thread = ProcessThread(
             files_to_process,
             self.params_panel.get_stack_mode(),
-            self.params_panel.get_raw_params(),
+            {},
             enable_gap_filling=self.params_panel.is_gap_filling_enabled(),
             gap_fill_method=gap_fill_method,
             gap_size=gap_size,
@@ -554,6 +609,7 @@ class MainWindow(QMainWindow):
             output_dir=output_dir,
             video_fps=video_fps,
             translator=self.tr,
+            enable_satellite_removal=True,
         )
 
         # 连接信号
@@ -577,62 +633,62 @@ class MainWindow(QMainWindow):
 
     def processing_cancelled(self):
         """用户取消处理后恢复 UI 状态"""
+        self.process_thread = None
         self.control_panel.set_idle_state(can_start=True)
         self.control_panel.update_status("已取消")
 
     def processing_finished(self, result: np.ndarray):
-        """处理完成"""
+        """堆栈完成 —— 启动后台保存线程，不阻塞主线程（C7）"""
         self.result_image = result
+        self.process_thread = None  # 允许白平衡改变时触发预览刷新
         self.preview_panel.update_preview(result)
 
-        # 获取输出目录
+        # 确定输出目录和文件路径
         output_dir = self.file_list_panel.get_output_dir()
         if not output_dir:
             output_dir = self.file_list_panel.get_all_files()[0].parent / "SuperStarTrail"
-
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
+        self._pending_save_output_dir = output_dir
 
-        # 生成文件名
-        tiff_filename = self._generate_output_filename()
-        tiff_path = output_dir / tiff_filename
+        tiff_path = output_dir / self._generate_output_filename()
 
-        # 添加保存日志
+        # 日志提示
         self.preview_panel.append_log("-" * 60)
-        self.preview_panel.append_log("正在保存 TIFF 文件...")
-        self.preview_panel.append_log(f"应用亮度拉伸 (1%-99.5%)...")
+        self.preview_panel.append_log(f"正在保存 TIFF 文件: {tiff_path.name}")
+        self.preview_panel.append_log("应用亮度拉伸 (1%-99.5%)...")
+        self.control_panel.update_status("💾 正在保存 TIFF...")
 
-        # 保存 TIFF
-        from core.exporter import ImageExporter
-        exporter = ImageExporter()
-        success = exporter.save_auto(self.result_image, tiff_path)
+        # 后台保存，保存期间保持按钮禁用
+        self._save_thread = SaveThread(self.result_image, tiff_path)
+        self._save_thread.save_finished.connect(self._on_save_finished)
+        self._save_thread.start()
+
+    def _on_save_finished(self, success: bool, filename: str):
+        """TIFF 保存完成回调"""
+        output_dir = self._pending_save_output_dir
 
         if success:
-            self.preview_panel.append_log(f"✅ TIFF 保存成功: {tiff_filename}")
+            self.preview_panel.append_log(f"✅ TIFF 保存成功: {filename}")
         else:
-            self.preview_panel.append_log(f"❌ TIFF 保存失败")
+            self.preview_panel.append_log("❌ TIFF 保存失败")
 
         self.preview_panel.append_log("=" * 60)
         self.preview_panel.append_log("🎉 全部完成！可以打开输出目录查看结果")
 
-        # 更新按钮状态
+        # 恢复 UI 状态
         self.control_panel.set_idle_state(can_start=True)
         self.file_list_panel.set_open_output_enabled(True)
 
         if success:
             self.control_panel.update_status("✅ 合成完成")
             logger.info(f"合成完成！文件已保存到: {output_dir}")
-
-            # 播放完成音效
             self.play_completion_sound()
-
             QMessageBox.information(
                 self,
                 self.tr.tr("msg_complete_title"),
                 self.tr.tr("msg_complete_text").format(path=output_dir)
             )
-
-            # 用户关闭对话框后，自动打开输出目录
             self.open_output_dir()
         else:
             self.control_panel.update_status("❌ 合成完成但保存失败")
@@ -662,18 +718,7 @@ class MainWindow(QMainWindow):
         return FileNamingService.generate_output_filename(
             file_paths=all_files,
             stack_mode=self.params_panel.get_stack_mode(),
-            white_balance=(
-                self.params_panel.get_white_balance()
-                if any(RawProcessor.is_raw_file(path) for path in all_files)
-                else "source"
-            ),
-            color_temperature=(
-                self.params_panel.get_color_temperature()
-                if self.params_panel.get_white_balance() == "manual"
-                and any(RawProcessor.is_raw_file(path) for path in all_files)
-                else None
-            ),
-            comet_fade_factor=self.params_panel.get_comet_fade_factor() 
+            comet_fade_factor=self.params_panel.get_comet_fade_factor()
                 if self.params_panel.get_stack_mode() == StackMode.COMET else None,
             enable_gap_filling=self.params_panel.is_gap_filling_enabled(),
             file_extension="tif"

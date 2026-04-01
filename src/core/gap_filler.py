@@ -302,8 +302,11 @@ class GapFiller:
         else:
             gray = image
 
-        # 归一化
-        normalized = gray.astype(np.float32) / np.max(gray)
+        # 归一化（保护除零：全黑图像直接返回空遮罩）
+        max_val = np.max(gray)
+        if max_val == 0:
+            return np.zeros(gray.shape, dtype=bool)
+        normalized = gray.astype(np.float32) / max_val
 
         # 阈值化
         mask = normalized > brightness_threshold

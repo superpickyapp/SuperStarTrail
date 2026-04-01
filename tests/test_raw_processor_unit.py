@@ -23,18 +23,15 @@ class TestRawProcessorUnit(unittest.TestCase):
         self.assertTrue(RawProcessor.is_raw_file(Path("test.nef")))
         self.assertFalse(RawProcessor.is_raw_file(Path("test.jpg")))
 
-    def test_kelvin_to_user_wb_returns_four_channel_multipliers(self):
-        """手动色温应转换为 rawpy 所需的 4 通道倍率"""
-        multipliers = RawProcessor._kelvin_to_user_wb(3200)
+    def test_is_supported_file_includes_image_formats(self):
+        """TIFF/JPG/PNG 应被识别为支持的格式"""
+        self.assertTrue(RawProcessor.is_supported_file(Path("test.tif")))
+        self.assertTrue(RawProcessor.is_supported_file(Path("test.jpg")))
+        self.assertTrue(RawProcessor.is_supported_file(Path("test.png")))
+        self.assertFalse(RawProcessor.is_supported_file(Path("test.bmp")))
 
-        self.assertEqual(len(multipliers), 4)
-        self.assertGreater(multipliers[0], 0)
-        self.assertEqual(multipliers[1], 1.0)
-        self.assertGreaterEqual(multipliers[2], 0)
-        self.assertEqual(multipliers[3], 1.0)
-
-    def test_non_raw_files_ignore_white_balance_settings(self):
-        """JPG 路径不应用白平衡或手动色温"""
+    def test_process_jpg_returns_16bit_array(self):
+        """处理 JPG 应返回 16-bit numpy 数组"""
         with tempfile.TemporaryDirectory() as tmpdir:
             image_path = Path(tmpdir) / "test.jpg"
             image = np.array(
@@ -47,14 +44,33 @@ class TestRawProcessorUnit(unittest.TestCase):
             Image.fromarray(image).save(image_path, "JPEG", quality=100, subsampling=0)
 
             processor = RawProcessor()
-            camera_result = processor.process(image_path, white_balance="camera")
-            manual_result = processor.process(
+            result = processor.process(image_path)
+
+            self.assertEqual(result.dtype, np.uint16)
+            self.assertEqual(result.ndim, 3)
+            self.assertEqual(result.shape[2], 3)
+
+    def test_process_jpg_ignores_extra_kwargs(self):
+        """process() 应忽略多余的关键字参数（向后兼容）"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            image_path = Path(tmpdir) / "test.jpg"
+            image = np.zeros((4, 4, 3), dtype=np.uint8)
+            Image.fromarray(image).save(image_path)
+
+            processor = RawProcessor()
+            # 传入旧版 white_balance / color_temperature 参数不应报错
+            result = processor.process(
                 image_path,
-                white_balance="manual",
+                white_balance="camera",
                 color_temperature=3200,
             )
+            self.assertIsNotNone(result)
 
-            np.testing.assert_array_equal(camera_result, manual_result)
+    def test_process_file_not_found_raises(self):
+        """文件不存在时应抛出 FileNotFoundError"""
+        processor = RawProcessor()
+        with self.assertRaises(FileNotFoundError):
+            processor.process(Path("/nonexistent/file.jpg"))
 
 
 if __name__ == "__main__":

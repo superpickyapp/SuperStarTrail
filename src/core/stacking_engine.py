@@ -122,6 +122,7 @@ class StackingEngine:
         self,
         image: np.ndarray,
         progress_callback: Optional[Callable[[int], None]] = None,
+        satellite_mask: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """
         添加一张图像到堆栈
@@ -129,6 +130,7 @@ class StackingEngine:
         Args:
             image: 输入图像数组 (H, W, 3)
             progress_callback: 进度回调函数，接收当前处理的图像数量
+            satellite_mask: 卫星/飞机划痕遮罩 (H, W) bool，True 的像素在堆栈时跳过更新
 
         Returns:
             当前堆栈结果的副本
@@ -136,22 +138,28 @@ class StackingEngine:
         # 转换为 float32 以避免溢出
         img_float = image.astype(np.float32)
 
+        # 如果有划痕遮罩，扩展到 3 通道以便广播
+        mask3 = satellite_mask[:, :, np.newaxis] if satellite_mask is not None else None
+
         if self.result is None:
-            # 第一张图像，直接作为初始结果
+            # 第一张图像，直接作为初始结果（遮罩区域用0初始化）
             self.result = img_float.copy()
+            if mask3 is not None:
+                self.result = np.where(mask3, 0.0, self.result)
         else:
             # 根据模式进行堆栈
             if self.mode == StackMode.LIGHTEN:
-                self.result = _fast_maximum(self.result, img_float)
+                new_val = _fast_maximum(self.result, img_float)
+                self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
             elif self.mode == StackMode.DARKEN:
-                self.result = _fast_minimum(self.result, img_float)
+                new_val = _fast_minimum(self.result, img_float)
+                self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
             elif self.mode == StackMode.AVERAGE:
                 # 增量平均：new_avg = (old_avg * count + new_value) / (count + 1)
-                self.result = (self.result * self.count + img_float) / (
-                    self.count + 1
-                )
+                new_val = (self.result * self.count + img_float) / (self.count + 1)
+                self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
             elif self.mode == StackMode.MEDIAN:
                 # 中值模式需要保存所有图像，这里暂不实现
@@ -159,14 +167,16 @@ class StackingEngine:
 
             elif self.mode == StackMode.ADDITION:
                 # 叠加模式需要注意溢出
-                self.result = self.result + img_float
+                new_val = self.result + img_float
+                self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
             elif self.mode == StackMode.COMET:
                 # 彗星模式：当前结果衰减，新图像添加
-                self.result = (
+                new_val = (
                     self.result * self.comet_fade_factor
                     + img_float * (1 - self.comet_fade_factor)
                 )
+                self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
         self.count += 1
 
@@ -176,7 +186,7 @@ class StackingEngine:
 
         # 如果启用延时视频，保存当前帧
         if self.enable_timelapse and self.timelapse_generator is not None:
-            self.timelapse_generator.add_frame(self.result.astype(np.uint16))
+            self.timelapse_generator.add_frame(np.clip(self.result, 0, 65535).astype(np.uint16))
 
         # 返回当前结果的简单副本，不应用填充
         # 填充只应该在最终 get_result() 时应用一次

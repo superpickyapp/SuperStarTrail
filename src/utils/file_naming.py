@@ -29,15 +29,6 @@ class FileNamingService:
         0.99: "LongTail",
     }
 
-    # 白平衡映射表
-    WHITE_BALANCE_NAMES = {
-        "camera": "CameraWB",
-        "daylight": "Daylight",
-        "auto": "AutoWB",
-        "manual": "ManualWB",
-        "source": "SourceWB",
-    }
-
     @staticmethod
     def extract_file_range(file_paths: List[Path]) -> str:
         """
@@ -76,8 +67,6 @@ class FileNamingService:
         cls,
         file_paths: List[Path],
         stack_mode: StackMode,
-        white_balance: str = "camera",
-        color_temperature: int = None,
         comet_fade_factor: float = None,
         enable_gap_filling: bool = False,
         file_extension: str = "tif"
@@ -88,7 +77,6 @@ class FileNamingService:
         Args:
             file_paths: 输入文件路径列表
             stack_mode: 堆栈模式
-            white_balance: 白平衡设置
             comet_fade_factor: 彗星衰减因子（仅彗星模式需要）
             enable_gap_filling: 是否启用间隙填充
             file_extension: 文件扩展名（默认 tif）
@@ -96,29 +84,17 @@ class FileNamingService:
         Returns:
             输出文件名
         """
-        # 文件范围
         range_str = cls.extract_file_range(file_paths)
-
-        # 堆栈模式
         mode_name = cls.STACK_MODE_NAMES.get(stack_mode, "Unknown")
 
-        # 彗星尾巴长度（仅彗星模式）
         tail_suffix = ""
         if stack_mode == StackMode.COMET and comet_fade_factor is not None:
             tail_name = cls.TAIL_LENGTH_NAMES.get(comet_fade_factor, "MidTail")
             tail_suffix = f"_{tail_name}"
 
-        # 白平衡
-        if white_balance == "manual" and color_temperature is not None:
-            wb_name = f"{color_temperature}K"
-        else:
-            wb_name = cls.WHITE_BALANCE_NAMES.get(white_balance, "CameraWB")
-
-        # 间隙填充标记
         gap_suffix = "_GapFilled" if enable_gap_filling else ""
 
-        # 组合文件名
-        filename = f"{range_str}_{mode_name}{tail_suffix}_{wb_name}{gap_suffix}.{file_extension}"
+        filename = f"{range_str}_{mode_name}{tail_suffix}{gap_suffix}.{file_extension}"
 
         return filename
 
@@ -127,8 +103,6 @@ class FileNamingService:
         cls,
         file_paths: List[Path],
         stack_mode: StackMode,
-        white_balance: str = "camera",
-        color_temperature: int = None,
         comet_fade_factor: float = None,
         fps: int = 25,
         file_extension: str = "mp4"
@@ -139,7 +113,6 @@ class FileNamingService:
         Args:
             file_paths: 输入文件路径列表
             stack_mode: 堆栈模式
-            white_balance: 白平衡设置
             comet_fade_factor: 彗星衰减因子
             fps: 视频帧率
             file_extension: 文件扩展名（默认 mp4）
@@ -147,25 +120,14 @@ class FileNamingService:
         Returns:
             视频文件名
         """
-        # 文件范围
         range_str = cls.extract_file_range(file_paths)
-
-        # 堆栈模式
         mode_name = cls.STACK_MODE_NAMES.get(stack_mode, "Unknown")
 
-        # 彗星尾巴长度
         tail_suffix = ""
         if stack_mode == StackMode.COMET and comet_fade_factor is not None:
             tail_name = cls.TAIL_LENGTH_NAMES.get(comet_fade_factor, "MidTail")
             tail_suffix = f"_{tail_name}"
 
-        # 白平衡
-        if white_balance == "manual" and color_temperature is not None:
-            wb_name = f"{color_temperature}K"
-        else:
-            wb_name = cls.WHITE_BALANCE_NAMES.get(white_balance, "CameraWB")
-
-        # 组合文件名 (StarTrail_Timelapse 开头)
-        filename = f"StarTrail_Timelapse_{range_str}_{mode_name}{tail_suffix}_{wb_name}_{fps}FPS.{file_extension}"
+        filename = f"StarTrail_Timelapse_{range_str}_{mode_name}{tail_suffix}_{fps}FPS.{file_extension}"
 
         return filename

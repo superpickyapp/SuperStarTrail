@@ -21,5 +21,8 @@ tifffile>=2022.0.0
 # 性能优化
 numba>=0.55.0
 
+# 天文图像处理
+astropy>=5.0.0  # 用于高质量预览拉伸算法 (ZScale, AsinhStretch)
+
 # 日志和配置
 pyyaml>=6.0

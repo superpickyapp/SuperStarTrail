@@ -126,8 +126,12 @@ class TimelapseGenerator:
             p_low = np.percentile(image, 1)
             p_high = np.percentile(image, 99.5)
 
-            # 拉伸到 0-255
-            img_stretched = np.clip((image - p_low) / (p_high - p_low) * 255, 0, 255)
+            # 拉伸到 0-255（保护除零：极低对比度图像直接用 p_low 填充）
+            scale = float(p_high - p_low)
+            if scale < 1.0:
+                img_stretched = np.zeros_like(image, dtype=np.float32)
+            else:
+                img_stretched = np.clip((image - p_low) / scale * 255, 0, 255)
             img_8bit = img_stretched.astype(np.uint8)
         else:
             img_8bit = image

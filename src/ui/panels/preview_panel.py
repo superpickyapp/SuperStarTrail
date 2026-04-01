@@ -26,6 +26,13 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
+try:
+    from astropy.visualization import ZScaleInterval, AsinhStretch
+    _ASTROPY_AVAILABLE = True
+except ImportError:
+    _ASTROPY_AVAILABLE = False
+    logger.warning("astropy 未安装，预览将使用百分位数拉伸作为备用")
+
 
 class PreviewPanel(QWidget):
     """预览面板"""
@@ -113,12 +120,49 @@ class PreviewPanel(QWidget):
 
         layout.addWidget(self.log_text)  # 不添加拉伸因子，保持固定大小
 
-    def update_preview(self, image: np.ndarray):
-        """更新预览图像（自动曝光优化，使用缓存提升性能）"""
-        import time
-        import cv2
+    @staticmethod
+    def _stretch_for_preview(image: np.ndarray, settings) -> np.ndarray:
+        """
+        将 uint16 图像拉伸为适合显示的 uint8。
 
-        start_time = time.time()
+        优先使用 astropy ZScaleInterval + AsinhStretch 组合：
+        - ZScale 自动找最优显示范围（天文标准，对星野效果极好）
+        - AsinhStretch 非线性拉伸，保留亮星细节的同时提亮暗星
+
+        若 astropy 不可用则回退到简单百分位数拉伸。
+        """
+        if _ASTROPY_AVAILABLE:
+            try:
+                # ZScale 基于亮度通道计算显示范围（对多通道 RGB 更准确）
+                lum = np.mean(image, axis=2).astype(np.float32) if image.ndim == 3 else image.astype(np.float32)
+                vmin, vmax = ZScaleInterval().get_limits(lum)
+                scale = max(float(vmax - vmin), 1.0)
+
+                # 归一化到 [0, 1]
+                img_float = np.clip(
+                    (image.astype(np.float32) - vmin) / scale, 0.0, 1.0
+                )
+
+                # AsinhStretch：a=0.1 对星野广角场景效果好
+                # a 越小拉伸越激进（暗区提亮越多），0.05~0.2 均可
+                img_stretched = AsinhStretch(a=0.1)(img_float)
+
+                logger.debug(f"ZScale+Asinh 拉伸: vmin={vmin:.0f}, vmax={vmax:.0f}")
+                return (np.clip(img_stretched, 0.0, 1.0) * 255).astype(np.uint8)
+
+            except Exception as e:
+                logger.debug(f"astropy 拉伸失败，回退到百分位数: {e}")
+
+        # 回退：简单百分位数拉伸
+        p_low, p_high = settings.get_preview_percentiles()
+        v_low = np.percentile(image, p_low)
+        v_high = np.percentile(image, p_high)
+        scale = max(float(v_high - v_low), 1.0)
+        return np.clip((image.astype(np.float32) - v_low) / scale * 255, 0, 255).astype(np.uint8)
+
+    def update_preview(self, image: np.ndarray):
+        """更新预览图像（自动曝光优化）"""
+        import cv2
 
         # 从配置获取预览参数
         settings = get_settings()
@@ -135,25 +179,9 @@ class PreviewPanel(QWidget):
         else:
             image_small = image
 
-        # 转换为 8-bit 用于显示，使用自动拉伸提升亮度
+        # 转换为 8-bit 用于显示
         if image_small.dtype == np.uint16:
-            # 使用缓存的拉伸参数（仅在第一帧或缓存失效时计算）
-            if not self._preview_cache_valid or self._preview_stretch_cache is None:
-                # 从配置获取百分位数
-                percentile_low, percentile_high = settings.get_preview_percentiles()
-                # 对缩小后的图像使用百分位数拉伸（O(n log n)，较慢）
-                p_low = np.percentile(image_small, percentile_low)
-                p_high = np.percentile(image_small, percentile_high)
-                self._preview_stretch_cache = (p_low, p_high)
-                self._preview_cache_valid = True
-                logger.debug(f"预览拉伸参数已缓存: low={p_low:.1f}, high={p_high:.1f}")
-            else:
-                # 使用缓存的参数（快速）
-                p_low, p_high = self._preview_stretch_cache
-
-            # 拉伸到 0-255
-            img_stretched = np.clip((image_small - p_low) / (p_high - p_low) * 255, 0, 255)
-            img_8bit = img_stretched.astype(np.uint8)
+            img_8bit = self._stretch_for_preview(image_small, settings)
         else:
             img_8bit = image_small
 
@@ -176,8 +204,6 @@ class PreviewPanel(QWidget):
         self.preview_label.update()
         QApplication.processEvents()
 
-        elapsed = time.time() - start_time
-        logger.debug(f"预览更新完成，耗时: {elapsed:.3f}秒")
 
     def append_log(self, message: str):
         """添加日志消息到日志区域"""
