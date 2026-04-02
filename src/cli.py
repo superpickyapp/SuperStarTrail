@@ -160,7 +160,6 @@ def cmd_stack(args):
         "lighten": StackMode.LIGHTEN,
         "comet":   StackMode.COMET,
         "average": StackMode.AVERAGE,
-        "median":  StackMode.MEDIAN,
         "darken":  StackMode.DARKEN,
     }
     stack_mode = mode_map.get(args.mode, StackMode.LIGHTEN)
@@ -382,7 +381,7 @@ def build_parser():
     p_stack.add_argument("dir", help="图片目录")
     p_stack.add_argument("-o", "--output", help="输出目录（默认: <dir>/SuperStarTrail）")
     p_stack.add_argument("--mode", default="lighten",
-                         choices=["lighten", "comet", "average", "median", "darken"],
+                         choices=["lighten", "comet", "average", "darken"],
                          help="堆栈模式（默认: lighten）")
     p_stack.add_argument("--fade", type=float, default=0.97,
                          help="彗星模式衰减因子（默认: 0.97）")

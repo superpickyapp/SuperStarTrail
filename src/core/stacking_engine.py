@@ -24,8 +24,6 @@ class StackMode(Enum):
     LIGHTEN = "lighten"  # 最大值 - 用于星轨
     DARKEN = "darken"  # 最小值 - 用于去除光污染
     AVERAGE = "average"  # 平均值 - 用于降噪
-    MEDIAN = "median"  # 中值 - 用于去除热像素
-    ADDITION = "addition"  # 叠加 - 累积曝光
     COMET = "comet"  # 彗星模式 - 渐变尾迹
 
 
@@ -166,15 +164,6 @@ class StackingEngine:
                 new_val = (self.result * self.count + img_float) / (self.count + 1)
                 self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
-            elif self.mode == StackMode.MEDIAN:
-                # 中值模式需要保存所有图像，这里暂不实现
-                raise NotImplementedError("中值模式需要在批量处理中实现")
-
-            elif self.mode == StackMode.ADDITION:
-                # 叠加模式需要注意溢出
-                new_val = self.result + img_float
-                self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
-
             elif self.mode == StackMode.COMET:
                 # 彗星模式：当前结果衰减，新图像添加
                 new_val = (
@@ -215,15 +204,12 @@ class StackingEngine:
         # 如果不需要归一化也不需要填充，返回视图而非拷贝
         needs_modification = (
             normalize or
-            self.mode == StackMode.ADDITION or
             (apply_gap_filling and self.enable_gap_filling and self.gap_filler is not None)
         )
 
         result = self.result.copy() if needs_modification else self.result
 
-        # 对于 Addition 模式，可能需要归一化
-        if normalize or self.mode == StackMode.ADDITION:
-            # 裁剪到有效范围（np.clip 返回新数组）
+        if normalize:
             result = np.clip(result, 0, 65535)
 
         # 应用间隔填充（如果启用且需要）
@@ -271,27 +257,6 @@ class StackingEngine:
                 progress_callback(i + 1, total)
 
         return self.get_result()
-
-    def process_median(self, images: List[np.ndarray]) -> np.ndarray:
-        """
-        中值堆栈（需要所有图像在内存中）
-
-        Args:
-            images: 图像列表
-
-        Returns:
-            中值堆栈结果
-        """
-        if not images:
-            raise ValueError("图像列表为空")
-
-        # 将所有图像堆叠成 4D 数组 (N, H, W, C)
-        stack = np.stack(images, axis=0).astype(np.float32)
-
-        # 沿着第一个轴（图像数量）计算中值
-        result = np.median(stack, axis=0)
-
-        return result.astype(np.uint16)
 
     def set_comet_fade_factor(self, factor: float):
         """
