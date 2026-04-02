@@ -5,7 +5,7 @@
 """
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from threading import Event
 from PyQt5.QtWidgets import (
     QMainWindow,
@@ -107,6 +107,7 @@ class ProcessThread(QThread):
         translator = None,
         enable_satellite_removal: bool = False,
         rotation: int = 0,
+        mask_path: Optional[Path] = None,
     ):
         super().__init__()
         self.file_paths = file_paths
@@ -123,6 +124,7 @@ class ProcessThread(QThread):
         self.video_fps = video_fps
         self.enable_satellite_removal = enable_satellite_removal
         self.rotation = rotation
+        self.mask_path = mask_path
         self._stop_event = Event()  # 使用线程安全的 Event 替代布尔标志
 
     def run(self):
@@ -175,6 +177,20 @@ class ProcessThread(QThread):
                     resolution=(3840, 2160)
                 )
 
+            # 加载蒙版（如有）
+            sky_mask = None
+            if self.mask_path is not None:
+                try:
+                    from core.mask_processor import MaskProcessor
+                    # 先读第一张图确定目标分辨率
+                    first_img = processor.process(self.file_paths[0], rotation=self.rotation, **self.raw_params)
+                    sky_mask = MaskProcessor.load(self.mask_path, target_shape=first_img.shape[:2], rotation=self.rotation)
+                    self.log_message.emit(f"已加载蒙版: {self.mask_path.name}，形状: {sky_mask.shape}")
+                    logger.info(f"已加载蒙版: {self.mask_path}")
+                except Exception as e:
+                    self.log_message.emit(f"⚠️  蒙版加载失败，将跳过双轨堆栈: {e}")
+                    logger.warning(f"蒙版加载失败: {e}")
+
             engine = StackingEngine(
                 self.stack_mode,
                 enable_gap_filling=self.enable_gap_filling,
@@ -183,6 +199,7 @@ class ProcessThread(QThread):
                 enable_timelapse=self.enable_timelapse,
                 timelapse_output_path=timelapse_output_path,
                 video_fps=self.video_fps,
+                sky_mask=sky_mask,
             )
 
             # 如果是彗星模式，设置衰减因子
@@ -236,6 +253,9 @@ class ProcessThread(QThread):
                 from core.satellite_filter import SatelliteFilter
                 sat_filter = SatelliteFilter()
 
+            # 若蒙版加载时已处理第一张图，缓存以避免重复 I/O
+            _cached_first_img = first_img if sky_mask is not None and 'first_img' in dir() else None
+
             for i, path in enumerate(self.file_paths):
                 if self._stop_event.is_set():
                     logger.warning("用户取消处理")
@@ -249,7 +269,10 @@ class ProcessThread(QThread):
                     logger.info(log_msg)
                     self.log_message.emit(log_msg)
 
-                    img = processor.process(path, rotation=self.rotation, **self.raw_params)
+                    if i == 0 and _cached_first_img is not None:
+                        img = _cached_first_img
+                    else:
+                        img = processor.process(path, rotation=self.rotation, **self.raw_params)
 
                     # 如果启用银河延时视频，添加此帧
                     if milkyway_timelapse_generator:
@@ -618,6 +641,7 @@ class MainWindow(QMainWindow):
             translator=self.tr,
             enable_satellite_removal=True,
             rotation=self.file_list_panel.get_rotation(),
+            mask_path=self.file_list_panel.get_mask_path(),
         )
 
         # 连接信号
