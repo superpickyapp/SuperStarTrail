@@ -193,7 +193,7 @@ def cmd_stack(args):
         mask_path = _Path(args.mask)
         # 读第一张图获取目标分辨率
         _first = processor.process(all_files[0], rotation=args.rotation)
-        sky_mask = MaskProcessor.load(mask_path, target_shape=_first.shape[:2], rotation=args.rotation)
+        sky_mask = MaskProcessor.load(mask_path, target_shape=_first.shape[:2])
         print(f"  蒙版       : {mask_path.name}  形状={sky_mask.shape}")
 
     # 初始化引擎

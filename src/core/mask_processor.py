@@ -3,6 +3,9 @@
 
 负责加载 PNG 蒙版文件，并将其转换为归一化的 float32 数组。
 白色区域（255）= 天空（sky_result），黑色区域（0）= 地景（fg_result）。
+
+蒙版始终由用户在 PS 中对着已旋转的图片制作，导出时方向已正确，
+因此这里只做 resize，不施加额外旋转。
 """
 import numpy as np
 from pathlib import Path
@@ -13,14 +16,17 @@ class MaskProcessor:
     """PNG 蒙版加载器"""
 
     @staticmethod
-    def load(mask_path: Path, target_shape: tuple, rotation: int = 0) -> np.ndarray:
+    def load(mask_path: Path, target_shape: tuple) -> np.ndarray:
         """
-        加载 PNG 蒙版，旋转后 resize 到目标尺寸，返回 float32 [0,1] 数组。
+        加载 PNG 蒙版，resize 到目标尺寸，返回 float32 [0,1] 数组。
+
+        target_shape 应为堆栈图像处理后的形状（已含旋转），
+        蒙版本身不做额外旋转——用户在 PS 中看到的已是旋转后的图，
+        导出的蒙版方向与最终结果一致。
 
         Args:
             mask_path:    蒙版 PNG 文件路径
             target_shape: 目标形状 (height, width)，与堆栈图像一致
-            rotation:     旋转角度，与主处理流程一致（0/90/180/270）
 
         Returns:
             float32 数组，形状 (height, width)，值域 [0.0, 1.0]
@@ -39,13 +45,7 @@ class MaskProcessor:
 
         img = Image.open(mask_path).convert("L")  # 转灰度
 
-        # 应用旋转（与 raw_processor 保持一致）
-        if rotation:
-            k = {90: 3, 180: 2, 270: 1}[rotation]
-            arr = np.rot90(np.array(img), k=k)
-            img = Image.fromarray(arr)
-
-        # Resize 到目标尺寸
+        # Resize 到目标尺寸（target_shape 已经是旋转后的尺寸）
         target_h, target_w = target_shape
         if img.size != (target_w, target_h):
             img = img.resize((target_w, target_h), Image.LANCZOS)
