@@ -29,6 +29,7 @@ class FileListPanel(QWidget):
     file_clicked = pyqtSignal(object)  # 当文件被点击时触发（用于预览）
     open_output_clicked = pyqtSignal()  # 打开输出目录按钮点击
     rotation_changed = pyqtSignal(int)  # 旋转角度改变时触发（0/90/180/270）
+    mask_path_changed = pyqtSignal(object)  # 蒙版路径改变时触发（Path 或 None）
 
     def __init__(self, translator: Translator, parent=None):
         super().__init__(parent)
@@ -40,6 +41,7 @@ class FileListPanel(QWidget):
         self.output_dir: Optional[str] = None  # 输出目录
         self._output_dir_is_manual: bool = False  # 用户是否手动指定了输出目录
         self._rotation: int = 0  # 当前旋转角度（0/90/180/270）
+        self._mask_path: Optional[Path] = None  # 蒙版 PNG 路径
 
         self._init_ui()
 
@@ -100,6 +102,28 @@ class FileListPanel(QWidget):
         self.combo_rotation.currentIndexChanged.connect(self._on_rotation_changed)
         rotation_layout.addWidget(self.combo_rotation, 1)
         file_layout.addLayout(rotation_layout)
+
+        # 蒙版选择
+        mask_layout = QHBoxLayout()
+        self.btn_select_mask = QPushButton("选择蒙版 PNG")
+        self.btn_select_mask.setToolTip("选择 Photoshop 导出的天空蒙版（白=天空，黑=地景）")
+        self.btn_select_mask.setStyleSheet(SECONDARY_BUTTON_STYLE)
+        self.btn_select_mask.clicked.connect(self.select_mask)
+        mask_layout.addWidget(self.btn_select_mask)
+
+        self.btn_clear_mask = QPushButton("清除")
+        self.btn_clear_mask.setToolTip("移除蒙版，恢复单轨堆栈")
+        self.btn_clear_mask.setStyleSheet(SECONDARY_BUTTON_STYLE)
+        self.btn_clear_mask.setEnabled(False)
+        self.btn_clear_mask.clicked.connect(self.clear_mask)
+        mask_layout.addWidget(self.btn_clear_mask)
+
+        self.label_mask = QLabel("未选择蒙版")
+        self.label_mask.setWordWrap(True)
+        self.label_mask.setStyleSheet(INFO_LABEL_STYLE)
+        mask_layout.addWidget(self.label_mask, 1)
+
+        file_layout.addLayout(mask_layout)
 
         # 文件列表
         self.file_list = QListWidget()
@@ -389,3 +413,28 @@ class FileListPanel(QWidget):
         if 0 <= index < len(self.raw_files):
             # 发射信号，传递文件路径
             self.file_clicked.emit(self.raw_files[index])
+
+    def select_mask(self):
+        """选择蒙版 PNG 文件"""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择蒙版 PNG 文件",
+            str(self._mask_path.parent) if self._mask_path else str(Path.home()),
+            "PNG 文件 (*.png)"
+        )
+        if path:
+            self._mask_path = Path(path)
+            self.label_mask.setText(self._mask_path.name)
+            self.btn_clear_mask.setEnabled(True)
+            self.mask_path_changed.emit(self._mask_path)
+
+    def clear_mask(self):
+        """清除蒙版"""
+        self._mask_path = None
+        self.label_mask.setText("未选择蒙版")
+        self.btn_clear_mask.setEnabled(False)
+        self.mask_path_changed.emit(None)
+
+    def get_mask_path(self) -> Optional[Path]:
+        """获取当前蒙版路径（无蒙版返回 None）"""
+        return self._mask_path
