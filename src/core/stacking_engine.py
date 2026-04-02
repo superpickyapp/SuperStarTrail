@@ -45,6 +45,9 @@ def _fast_maximum(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 class StackingEngine:
     """图像堆栈引擎"""
 
+    # 地景固定使用彗星模式的衰减因子（比天空彗星更慢衰减，保留更多曝光细节）
+    _FG_FADE = 0.97
+
     def __init__(
         self,
         mode: StackMode = StackMode.LIGHTEN,
@@ -54,22 +57,29 @@ class StackingEngine:
         enable_timelapse: bool = False,
         timelapse_output_path: Optional[Path] = None,
         video_fps: int = 30,
+        sky_mask: Optional[np.ndarray] = None,
     ):
         """
         初始化堆栈引擎
 
         Args:
-            mode: 堆栈模式
+            mode: 天空区域的堆栈模式（地景固定为 COMET）
             enable_gap_filling: 是否启用间隔填充（消除星轨间隔）
             gap_fill_method: 填充方法 ('linear', 'morphological', 'motion_blur')
             gap_size: 要填充的最大间隔大小（像素）
             enable_timelapse: 是否生成延时视频
             timelapse_output_path: 延时视频输出路径
+            sky_mask: float32 蒙版 (H, W)，1.0=天空，0.0=地景；None 表示不使用蒙版
         """
         self.mode = mode
         self.result: Optional[np.ndarray] = None
         self.count = 0
         self.comet_fade_factor = 0.98  # 彗星模式的衰减因子
+
+        # 双轨堆栈状态
+        self.sky_mask: Optional[np.ndarray] = sky_mask  # (H, W) float32
+        self.sky_result: Optional[np.ndarray] = None    # 天空轨道
+        self.fg_result: Optional[np.ndarray] = None     # 地景轨道（固定 COMET）
         self.enable_gap_filling = enable_gap_filling
         self.gap_filler = None
         self.gap_fill_method = gap_fill_method
@@ -99,6 +109,8 @@ class StackingEngine:
     def reset(self):
         """重置引擎状态"""
         self.result = None
+        self.sky_result = None
+        self.fg_result = None
         self.count = 0
 
     def add_image(
@@ -125,10 +137,14 @@ class StackingEngine:
         mask3 = satellite_mask[:, :, np.newaxis] if satellite_mask is not None else None
 
         if self.result is None:
-            # 第一张图像，直接作为初始结果（遮罩区域用0初始化）
+            # 第一张图像，直接作为初始结果（划痕遮罩区域用0初始化）
             self.result = img_float.copy()
             if mask3 is not None:
                 self.result = np.where(mask3, 0.0, self.result)
+            # 双轨初始化
+            if self.sky_mask is not None:
+                self.sky_result = img_float.copy()
+                self.fg_result = img_float.copy()
         elif img_float.shape != self.result.shape:
             raise ValueError(
                 f"图像尺寸不匹配: 已有堆栈为 {self.result.shape[:2]}，"
@@ -152,6 +168,26 @@ class StackingEngine:
                     + img_float * (1 - self.comet_fade_factor)
                 )
                 self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
+
+            # 双轨堆栈：天空用 self.mode，地景固定 COMET
+            if self.sky_mask is not None:
+                # 天空轨道
+                if self.mode == StackMode.LIGHTEN:
+                    sky_new = _fast_maximum(self.sky_result, img_float)
+                elif self.mode == StackMode.AVERAGE:
+                    sky_new = (self.sky_result * self.count + img_float) / (self.count + 1)
+                else:  # COMET
+                    sky_new = (
+                        self.sky_result * self.comet_fade_factor
+                        + img_float * (1 - self.comet_fade_factor)
+                    )
+                self.sky_result = sky_new
+
+                # 地景轨道：固定彗星，fade=_FG_FADE
+                self.fg_result = (
+                    self.fg_result * self._FG_FADE
+                    + img_float * (1 - self._FG_FADE)
+                )
 
         self.count += 1
 
@@ -180,6 +216,14 @@ class StackingEngine:
         """
         if self.result is None:
             raise ValueError("还没有添加任何图像")
+
+        # 双轨融合：sky_result × mask + fg_result × (1 - mask)
+        if self.sky_mask is not None and self.sky_result is not None and self.fg_result is not None:
+            mask3 = self.sky_mask[:, :, np.newaxis]  # (H, W, 1) 广播到 3 通道
+            blended = self.sky_result * mask3 + self.fg_result * (1.0 - mask3)
+            result = np.clip(blended, 0, 65535).astype(np.uint16)
+            # gap_filling 暂不支持双轨模式，直接返回
+            return result
 
         # 内存优化：仅在需要修改时才拷贝
         # 如果不需要归一化也不需要填充，返回视图而非拷贝
