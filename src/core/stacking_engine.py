@@ -146,6 +146,11 @@ class StackingEngine:
             self.result = img_float.copy()
             if mask3 is not None:
                 self.result = np.where(mask3, 0.0, self.result)
+        elif img_float.shape != self.result.shape:
+            raise ValueError(
+                f"图像尺寸不匹配: 已有堆栈为 {self.result.shape[:2]}，"
+                f"新图像为 {img_float.shape[:2]}，所有图片必须分辨率相同"
+            )
         else:
             # 根据模式进行堆栈
             if self.mode == StackMode.LIGHTEN:

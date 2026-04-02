@@ -110,11 +110,38 @@ def cmd_stack(args):
 
     # 扫描文件
     processor = RawProcessor()
-    all_files = sorted([
+    raw_exts = RawProcessor.SUPPORTED_RAW_FORMATS
+    jpg_exts = {".jpg", ".jpeg"}
+
+    candidate_files = [
         f for f in source_dir.iterdir()
         if f.is_file() and not f.name.startswith(".")
         and processor.is_supported_file(f)
+    ]
+    raw_files = sorted([f for f in candidate_files if f.suffix.lower() in raw_exts])
+    jpg_files = sorted([f for f in candidate_files if f.suffix.lower() in jpg_exts])
+    other_files = sorted([
+        f for f in candidate_files
+        if f.suffix.lower() not in raw_exts and f.suffix.lower() not in jpg_exts
     ])
+
+    # 同名 RAW+JPG 配对时，按 --jpg 参数决定使用哪种格式
+    raw_stems = {f.stem for f in raw_files}
+    jpg_stems = {f.stem for f in jpg_files}
+    common_stems = raw_stems & jpg_stems
+
+    if common_stems:
+        if args.jpg:
+            # 去掉与 JPG 同名的 RAW
+            raw_files = [f for f in raw_files if f.stem not in common_stems]
+        else:
+            # 默认：去掉与 RAW 同名的 JPG
+            jpg_files = [f for f in jpg_files if f.stem not in common_stems]
+        if common_stems:
+            fmt = "JPG" if args.jpg else "NEF/RAW"
+            print(f"检测到 {len(common_stems)} 对同名 RAW+JPG，自动选择 {fmt}（可用 --jpg 切换）")
+
+    all_files = sorted(raw_files + jpg_files + other_files, key=lambda f: f.name)
 
     if not all_files:
         print(f"错误: 目录中没有支持的图片文件 - {source_dir}")
@@ -376,6 +403,8 @@ def build_parser():
                          help="延时视频帧率（默认: 30）")
     p_stack.add_argument("--limit", type=int, default=0,
                          help="只处理前 N 张（0 = 全部）")
+    p_stack.add_argument("--jpg", action="store_true",
+                         help="同名 RAW+JPG 时优先使用 JPG（默认优先 RAW）")
 
     # ── export ────────────────────────────────
     p_export = sub.add_parser("export", help="转换/导出图像")
