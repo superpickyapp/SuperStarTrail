@@ -8,7 +8,7 @@ from typing import List, Callable, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox,
     QPushButton, QLabel, QListWidget, QFileDialog,
-    QMenu, QMessageBox, QToolButton
+    QMenu, QMessageBox, QToolButton, QComboBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from i18n.translator import Translator
@@ -28,6 +28,7 @@ class FileListPanel(QWidget):
     output_dir_changed = pyqtSignal(str)  # 当输出目录改变时触发
     file_clicked = pyqtSignal(object)  # 当文件被点击时触发（用于预览）
     open_output_clicked = pyqtSignal()  # 打开输出目录按钮点击
+    rotation_changed = pyqtSignal(int)  # 旋转角度改变时触发（0/90/180/270）
 
     def __init__(self, translator: Translator, parent=None):
         super().__init__(parent)
@@ -38,6 +39,7 @@ class FileListPanel(QWidget):
         self.excluded_files: set = set()  # 被排除的文件索引
         self.output_dir: Optional[str] = None  # 输出目录
         self._output_dir_is_manual: bool = False  # 用户是否手动指定了输出目录
+        self._rotation: int = 0  # 当前旋转角度（0/90/180/270）
 
         self._init_ui()
 
@@ -87,6 +89,17 @@ class FileListPanel(QWidget):
         output_dir_layout.addWidget(self.label_output_dir, 1)
 
         file_layout.addLayout(output_dir_layout)
+
+        # 旋转设置
+        rotation_layout = QHBoxLayout()
+        rotation_label = QLabel("旋转:")
+        rotation_layout.addWidget(rotation_label)
+        self.combo_rotation = QComboBox()
+        self.combo_rotation.addItems(["不旋转", "顺时针 90°", "180°", "逆时针 90°"])
+        self.combo_rotation.setToolTip("对目录内所有图片统一旋转，用于竖拍素材")
+        self.combo_rotation.currentIndexChanged.connect(self._on_rotation_changed)
+        rotation_layout.addWidget(self.combo_rotation, 1)
+        file_layout.addLayout(rotation_layout)
 
         # 文件列表
         self.file_list = QListWidget()
@@ -209,6 +222,12 @@ class FileListPanel(QWidget):
         self.raw_files = files
         self.excluded_files.clear()  # 清空排除列表
         self.refresh_file_list()
+
+        # 新文件夹重置旋转
+        self._rotation = 0
+        self.combo_rotation.blockSignals(True)
+        self.combo_rotation.setCurrentIndex(0)
+        self.combo_rotation.blockSignals(False)
 
         # 若用户未手动指定输出目录，每次切换源文件夹时自动跟随更新
         if not self._output_dir_is_manual:
@@ -337,6 +356,19 @@ class FileListPanel(QWidget):
     def get_output_dir(self) -> Optional[str]:
         """获取输出目录"""
         return self.output_dir
+
+    def get_rotation(self) -> int:
+        """获取当前旋转角度（0/90/180/270）"""
+        return self._rotation
+
+    def _on_rotation_changed(self, index: int):
+        """旋转下拉框改变时更新状态并通知预览"""
+        angle_map = {0: 0, 1: 90, 2: 180, 3: 270}
+        self._rotation = angle_map[index]
+        self.rotation_changed.emit(self._rotation)
+        # 刷新当前预览图
+        if self.raw_files:
+            self.file_clicked.emit(self.raw_files[0])
 
     def has_files(self) -> bool:
         """检查是否有可处理的文件"""

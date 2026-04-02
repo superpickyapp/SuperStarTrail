@@ -40,17 +40,19 @@ class PreviewThread(QThread):
     preview_ready = pyqtSignal(np.ndarray, object)  # (image, file_path)
     preview_error = pyqtSignal(str, object)          # (error_msg, file_path)
 
-    def __init__(self, file_path: Path, raw_params: dict):
+    def __init__(self, file_path: Path, raw_params: dict, rotation: int = 0):
         super().__init__()
         self.file_path = file_path
         self.raw_params = raw_params
+        self.rotation = rotation
 
     def run(self):
         try:
             from core.raw_processor import RawProcessor
             processor = RawProcessor()
             img = processor.process(
-                self.file_path, apply_exif_rotation=True, **self.raw_params
+                self.file_path, apply_exif_rotation=True,
+                rotation=self.rotation, **self.raw_params
             )
             self.preview_ready.emit(img, self.file_path)
         except Exception as e:
@@ -104,6 +106,7 @@ class ProcessThread(QThread):
         video_fps: int = 30,
         translator = None,
         enable_satellite_removal: bool = False,
+        rotation: int = 0,
     ):
         super().__init__()
         self.file_paths = file_paths
@@ -119,6 +122,7 @@ class ProcessThread(QThread):
         self.translator = translator
         self.video_fps = video_fps
         self.enable_satellite_removal = enable_satellite_removal
+        self.rotation = rotation
         self._stop_event = Event()  # 使用线程安全的 Event 替代布尔标志
 
     def run(self):
@@ -245,7 +249,7 @@ class ProcessThread(QThread):
                     logger.info(log_msg)
                     self.log_message.emit(log_msg)
 
-                    img = processor.process(path, **self.raw_params)
+                    img = processor.process(path, rotation=self.rotation, **self.raw_params)
 
                     # 如果启用银河延时视频，添加此帧
                     if milkyway_timelapse_generator:
@@ -539,7 +543,9 @@ class MainWindow(QMainWindow):
             self._preview_thread.preview_ready.disconnect()
             self._preview_thread.preview_error.disconnect()
 
-        self._preview_thread = PreviewThread(file_path, {})
+        self._preview_thread = PreviewThread(
+            file_path, {}, rotation=self.file_list_panel.get_rotation()
+        )
         self._preview_thread.preview_ready.connect(self._on_preview_ready)
         self._preview_thread.preview_error.connect(self._on_preview_error)
         self._preview_thread.start()
@@ -611,6 +617,7 @@ class MainWindow(QMainWindow):
             video_fps=video_fps,
             translator=self.tr,
             enable_satellite_removal=True,
+            rotation=self.file_list_panel.get_rotation(),
         )
 
         # 连接信号

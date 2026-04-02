@@ -227,7 +227,7 @@ def cmd_stack(args):
     for i, path in enumerate(all_files):
         file_start = time.time()
         try:
-            img = processor.process(path, **raw_params)
+            img = processor.process(path, rotation=args.rotation, **raw_params)
 
             if milkyway_generator:
                 milkyway_generator.add_frame(img)
@@ -403,6 +403,9 @@ def build_parser():
                          help="只处理前 N 张（0 = 全部）")
     p_stack.add_argument("--jpg", action="store_true",
                          help="同名 RAW+JPG 时优先使用 JPG（默认优先 RAW）")
+    p_stack.add_argument("--rotation", type=int, default=0,
+                         choices=[0, 90, 180, 270],
+                         help="顺时针旋转角度，竖拍素材用 90 或 270（默认: 0）")
 
     # ── export ────────────────────────────────
     p_export = sub.add_parser("export", help="转换/导出图像")

@@ -68,6 +68,7 @@ class RawProcessor:
         self,
         raw_path: Path,
         apply_exif_rotation: bool = False,
+        rotation: int = 0,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -102,8 +103,6 @@ class RawProcessor:
             with rawpy.imread(str(raw_path)) as raw:
                 rgb = raw.postprocess(**params)
 
-            return rgb
-
         # 如果是 TIFF、JPG、PNG 等格式，使用 PIL 读取
         # 非 RAW 文件不应用白平衡或手动色温，保持源文件颜色。
         else:
@@ -125,7 +124,12 @@ class RawProcessor:
             if rgb.dtype == np.uint8:
                 rgb = (rgb.astype(np.uint16) * 257)  # 8-bit -> 16-bit
 
-            return rgb
+        # 应用手动旋转（顺时针，整批统一）
+        if rotation:
+            k = {90: 3, 180: 2, 270: 1}[rotation]
+            rgb = np.rot90(rgb, k=k)
+
+        return rgb
 
     def get_thumbnail(
         self, raw_path: Path, max_size: int = 512
