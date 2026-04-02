@@ -185,6 +185,17 @@ def cmd_stack(args):
             resolution=(3840, 2160),
         )
 
+    # 加载天空蒙版（如有）
+    sky_mask = None
+    if args.mask:
+        from core.mask_processor import MaskProcessor
+        from pathlib import Path as _Path
+        mask_path = _Path(args.mask)
+        # 读第一张图获取目标分辨率
+        _first = processor.process(all_files[0], rotation=args.rotation)
+        sky_mask = MaskProcessor.load(mask_path, target_shape=_first.shape[:2], rotation=args.rotation)
+        print(f"  蒙版       : {mask_path.name}  形状={sky_mask.shape}")
+
     # 初始化引擎
     engine = StackingEngine(
         stack_mode,
@@ -194,6 +205,7 @@ def cmd_stack(args):
         enable_timelapse=args.timelapse,
         timelapse_output_path=timelapse_output_path,
         video_fps=args.fps,
+        sky_mask=sky_mask,
     )
 
     if stack_mode == StackMode.COMET:
@@ -224,10 +236,15 @@ def cmd_stack(args):
     failed_files = []
     satellite_removed_count = 0
 
+    _cached_first_img = _first if sky_mask is not None else None
+
     for i, path in enumerate(all_files):
         file_start = time.time()
         try:
-            img = processor.process(path, rotation=args.rotation, **raw_params)
+            if i == 0 and _cached_first_img is not None:
+                img = _cached_first_img
+            else:
+                img = processor.process(path, rotation=args.rotation, **raw_params)
 
             if milkyway_generator:
                 milkyway_generator.add_frame(img)
@@ -406,6 +423,8 @@ def build_parser():
     p_stack.add_argument("--rotation", type=int, default=0,
                          choices=[0, 90, 180, 270],
                          help="顺时针旋转角度，竖拍素材用 90 或 270（默认: 0）")
+    p_stack.add_argument("--mask", default=None,
+                         help="天空蒙版 PNG 路径（白=天空用所选模式，黑=地景固定 COMET）")
 
     # ── export ────────────────────────────────
     p_export = sub.add_parser("export", help="转换/导出图像")
