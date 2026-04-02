@@ -58,19 +58,6 @@ class TestStackingEngine(unittest.TestCase):
         expected = np.mean([img.astype(np.float32) for img in self.test_images], axis=0)
         np.testing.assert_array_almost_equal(result, expected, decimal=0)
 
-    def test_darken_mode(self):
-        """测试 Darken 模式"""
-        engine = StackingEngine(StackMode.DARKEN)
-
-        for img in self.test_images:
-            engine.add_image(img)
-
-        result = engine.get_result()
-
-        # 验证最小值逻辑
-        expected = np.minimum.reduce([img.astype(np.float32) for img in self.test_images])
-        np.testing.assert_array_equal(result, expected.astype(np.uint16))
-
     def test_reset(self):
         """测试重置功能"""
         engine = StackingEngine(StackMode.LIGHTEN)

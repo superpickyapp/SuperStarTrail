@@ -22,7 +22,6 @@ class StackMode(Enum):
     """堆栈模式枚举"""
 
     LIGHTEN = "lighten"  # 最大值 - 用于星轨
-    DARKEN = "darken"  # 最小值 - 用于去除光污染
     AVERAGE = "average"  # 平均值 - 用于降噪
     COMET = "comet"  # 彗星模式 - 渐变尾迹
 
@@ -41,20 +40,6 @@ def _fast_maximum(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     return np.maximum(a, b)
 
-
-@jit(nopython=True)
-def _fast_minimum(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """
-    JIT 加速的最小值运算
-
-    Args:
-        a: 第一个数组
-        b: 第二个数组
-
-    Returns:
-        逐元素最小值
-    """
-    return np.minimum(a, b)
 
 
 class StackingEngine:
@@ -153,10 +138,6 @@ class StackingEngine:
             # 根据模式进行堆栈
             if self.mode == StackMode.LIGHTEN:
                 new_val = _fast_maximum(self.result, img_float)
-                self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
-
-            elif self.mode == StackMode.DARKEN:
-                new_val = _fast_minimum(self.result, img_float)
                 self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
             elif self.mode == StackMode.AVERAGE:

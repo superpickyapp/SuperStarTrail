@@ -47,10 +47,6 @@ class ParametersPanel(QWidget):
              "对所有帧取平均值，随机噪点相互抵消\n"
              "适合：用多张短曝光合成低噪单张、制作暗帧校准文件\n"
              "注意：星星会因位移而消失，不产生星轨"),
-            (self.tr.tr("mode_darken"),
-             "逐帧取最暗像素，消除一切移动的亮点\n"
-             "适合：提取无星干净地景背景板、去除偶发车灯/路灯\n"
-             "注意：所有星星都会被去除，仅保留固定背景"),
         ]
         for text, tip in _mode_items:
             self.combo_stack_mode.addItem(text)
@@ -162,7 +158,6 @@ class ParametersPanel(QWidget):
             0: StackMode.LIGHTEN,
             1: StackMode.COMET,
             2: StackMode.AVERAGE,
-            3: StackMode.DARKEN,
         }
         return mode_map[self.combo_stack_mode.currentIndex()]
 

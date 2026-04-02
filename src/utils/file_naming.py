@@ -17,7 +17,6 @@ class FileNamingService:
         StackMode.COMET: "Comet",
         StackMode.LIGHTEN: "Lighten",
         StackMode.AVERAGE: "Average",
-        StackMode.DARKEN: "Darken",
     }
 
     # 彗星尾巴长度映射表
