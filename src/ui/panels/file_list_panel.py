@@ -53,7 +53,7 @@ class FileListPanel(QWidget):
         # 文件选择按钮 + 最近目录按钮
         folder_btn_layout = QHBoxLayout()
 
-        self.btn_select_folder = QPushButton(f"📁 {self.tr.tr('select_directory')}")
+        self.btn_select_folder = QPushButton(self.tr.tr('select_directory'))
         self.btn_select_folder.clicked.connect(self.select_folder)
         self.btn_select_folder.setToolTip(self.tr.tr('tooltip_select_folder'))
         self.btn_select_folder.setStyleSheet(PRIMARY_BUTTON_STYLE)
@@ -73,7 +73,7 @@ class FileListPanel(QWidget):
 
         # 输出目录选择
         output_dir_layout = QHBoxLayout()
-        self.btn_select_output = QPushButton(f"💾 {self.tr.tr('select_output_directory')}")
+        self.btn_select_output = QPushButton(self.tr.tr('select_output_directory'))
         self.btn_select_output.clicked.connect(self.select_output_dir)
         self.btn_select_output.setToolTip(
             self.tr.tr('tooltip_output_dir') if hasattr(self.tr, 'tr') else "Select output directory"
@@ -102,7 +102,7 @@ class FileListPanel(QWidget):
         file_layout.addWidget(self.label_file_count)
 
         # 打开输出目录按钮（底部）
-        self.btn_open_output = QPushButton(f"📂 {self.tr.tr('open_output_dir')}")
+        self.btn_open_output = QPushButton(self.tr.tr('open_output_dir'))
         self.btn_open_output.clicked.connect(self._on_open_output_clicked)
         self.btn_open_output.setEnabled(False)
         self.btn_open_output.setStyleSheet(SECONDARY_BUTTON_STYLE + "padding: 8px 16px;")
@@ -123,7 +123,7 @@ class FileListPanel(QWidget):
         else:
             for path in recent_dirs:
                 display = Path(path).name or path
-                action = self._recent_menu.addAction(f"📁  {display}")
+                action = self._recent_menu.addAction(display)
                 action.setToolTip(path)
                 action.triggered.connect(lambda checked, p=path: self._load_folder(p))
 

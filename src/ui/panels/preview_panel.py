@@ -47,6 +47,7 @@ class PreviewPanel(QWidget):
         # 预览缓存（用于亮度拉伸优化）
         self._preview_cache_valid = False
         self._preview_stretch_cache = None
+        self._current_pixmap: Optional[QPixmap] = None  # 保存原始 pixmap 供 resize 时重新缩放
 
         self._init_ui()
 
@@ -93,20 +94,20 @@ class PreviewPanel(QWidget):
         # 加载默认背景图片
         bg_path = Path(__file__).parent.parent.parent / "resources" / "bg.jpg"
         if bg_path.exists():
-            bg_pixmap = QPixmap(str(bg_path))
-            # 缩放到合适大小，保持宽高比
-            scaled_bg = bg_pixmap.scaled(
-                800, 533, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            self._current_pixmap = QPixmap(str(bg_path))
+            self.preview_label.setPixmap(
+                self._current_pixmap.scaled(
+                    self.preview_label.minimumSize(),
+                    Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
             )
-            self.preview_label.setPixmap(scaled_bg)
         else:
-            # 如果背景图不存在，显示占位文字
             self.preview_label.setText(self.tr.tr("drop_files_here"))
 
         layout.addWidget(self.preview_label, stretch=1)  # 拉伸因子让预览区域占据剩余空间
 
         # 添加日志输出区域
-        log_label = QLabel(f"📋 {self.tr.tr('processing_log')}")
+        log_label = QLabel(self.tr.tr('processing_log'))
         log_label.setStyleSheet(SUBTITLE_LABEL_STYLE)
         layout.addWidget(log_label)
 
@@ -191,19 +192,26 @@ class PreviewPanel(QWidget):
         q_img = QImage(bytes(img_8bit.tobytes()), w, h, bytes_per_line, QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(q_img)
 
-        # 缩放到 label 大小，保持宽高比
-        label_size = self.preview_label.size()
-        scaled_pixmap = pixmap.scaled(
-            label_size,
-            Qt.KeepAspectRatio,  # 保持宽高比
-            Qt.SmoothTransformation  # 平滑缩放
+        # 保存原始 pixmap，并缩放到当前 label 大小
+        self._current_pixmap = pixmap
+        self.preview_label.setPixmap(
+            pixmap.scaled(self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         )
-        self.preview_label.setPixmap(scaled_pixmap)
 
         # 强制刷新UI
         self.preview_label.update()
         QApplication.processEvents()
 
+
+    def resizeEvent(self, event):
+        """窗口/面板大小变化时重新缩放预览图"""
+        super().resizeEvent(event)
+        if self._current_pixmap and not self._current_pixmap.isNull():
+            self.preview_label.setPixmap(
+                self._current_pixmap.scaled(
+                    self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+            )
 
     def append_log(self, message: str):
         """添加日志消息到日志区域"""
@@ -228,15 +236,14 @@ class PreviewPanel(QWidget):
         # 重新加载默认背景图片
         bg_path = Path(__file__).parent.parent.parent / "resources" / "bg.jpg"
         if bg_path.exists():
-            bg_pixmap = QPixmap(str(bg_path))
-            # 缩放到当前 label 大小，保持宽高比
-            label_size = self.preview_label.size()
-            scaled_bg = bg_pixmap.scaled(
-                label_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            self._current_pixmap = QPixmap(str(bg_path))
+            self.preview_label.setPixmap(
+                self._current_pixmap.scaled(
+                    self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
             )
-            self.preview_label.setPixmap(scaled_bg)
         else:
-            # 如果背景图不存在，显示占位文字
+            self._current_pixmap = None
             self.preview_label.setText(self.tr.tr("drop_files_here"))
 
     def _set_default_instructions(self):

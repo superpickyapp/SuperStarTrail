@@ -432,7 +432,8 @@ class MainWindow(QMainWindow):
         self.tr = get_translator()
 
         self.setWindowTitle(f"{self.tr.tr('app_name')} by James Zhen Yu")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setMinimumSize(900, 600)
+        self.showMaximized()
 
         # 设置窗口图标
         icon_path = Path(__file__).parent.parent / "resources" / "logo.png"
@@ -657,7 +658,7 @@ class MainWindow(QMainWindow):
         self.preview_panel.append_log("-" * 60)
         self.preview_panel.append_log(f"正在保存 TIFF 文件: {tiff_path.name}")
         self.preview_panel.append_log("应用亮度拉伸 (1%-99.5%)...")
-        self.control_panel.update_status("💾 正在保存 TIFF...")
+        self.control_panel.update_status("正在保存 TIFF...")
 
         # 后台保存，保存期间保持按钮禁用
         self._save_thread = SaveThread(self.result_image, tiff_path)
@@ -674,7 +675,7 @@ class MainWindow(QMainWindow):
             self.preview_panel.append_log("❌ TIFF 保存失败")
 
         self.preview_panel.append_log("=" * 60)
-        self.preview_panel.append_log("🎉 全部完成！可以打开输出目录查看结果")
+        self.preview_panel.append_log("全部完成！可以打开输出目录查看结果")
 
         # 恢复 UI 状态
         self.control_panel.set_idle_state(can_start=True)

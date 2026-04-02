@@ -111,11 +111,6 @@ class ParametersPanel(QWidget):
             "额外处理时间：约 1-2 分钟"
         )
         self.check_enable_timelapse.setChecked(False)  # 默认关闭
-        self.check_enable_timelapse.stateChanged.connect(
-            lambda state: self.check_enable_timelapse.setText(
-                "✅ 星轨延时" if state else "星轨延时"
-            )
-        )
         options_layout.addWidget(self.check_enable_timelapse)
 
         # 银河延时
@@ -129,11 +124,6 @@ class ParametersPanel(QWidget):
             "适合展示银河移动、天空运动、云层变化等"
         )
         self.check_enable_simple_timelapse.setChecked(False)  # 默认关闭
-        self.check_enable_simple_timelapse.stateChanged.connect(
-            lambda state: self.check_enable_simple_timelapse.setText(
-                "✅ 银河延时" if state else "银河延时"
-            )
-        )
         options_layout.addWidget(self.check_enable_simple_timelapse)
 
         options_layout.addStretch()

@@ -37,9 +37,9 @@ TRANSLATIONS = {
         "stretch_custom": "自定义",
 
         "gap_filling": "间隔填充",
-        "gap_filling_checked": "✓ 间隔填充",
+        "gap_filling_checked": "间隔填充",
         "timelapse_video": "延时视频",
-        "timelapse_checked": "✓ 延时视频",
+        "timelapse_checked": "延时视频",
 
         "white_balance": "白平衡:",
         "wb_camera": "相机",
