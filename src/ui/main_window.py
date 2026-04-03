@@ -563,16 +563,20 @@ class MainWindow(QMainWindow):
         self._current_preview_file = file_path
         self.preview_panel.reset_preview_cache()
 
-        # 若上一个预览线程仍在运行，断开其信号（结果将被丢弃）
+        # 若上一个预览线程仍在运行，断开信号并让它自行结束
+        # 连接 finished → deleteLater 确保 Qt 持有对象直到线程真正退出
         if self._preview_thread is not None and self._preview_thread.isRunning():
             self._preview_thread.preview_ready.disconnect()
             self._preview_thread.preview_error.disconnect()
+            self._preview_thread.finished.connect(self._preview_thread.deleteLater)
+            self._preview_thread = None  # 释放 Python 引用，Qt 仍持有
 
         self._preview_thread = PreviewThread(
             file_path, {}, rotation=self.file_list_panel.get_rotation()
         )
         self._preview_thread.preview_ready.connect(self._on_preview_ready)
         self._preview_thread.preview_error.connect(self._on_preview_error)
+        self._preview_thread.finished.connect(self._preview_thread.deleteLater)
         self._preview_thread.start()
 
     def _on_preview_ready(self, img: np.ndarray, file_path: Path):
