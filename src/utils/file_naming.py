@@ -68,7 +68,9 @@ class FileNamingService:
         stack_mode: StackMode,
         comet_fade_factor: float = None,
         enable_gap_filling: bool = False,
-        file_extension: str = "tif"
+        file_extension: str = "tif",
+        has_mask: bool = False,
+        fg_mode: StackMode = None,
     ) -> str:
         """
         生成输出文件名
@@ -79,6 +81,8 @@ class FileNamingService:
             comet_fade_factor: 彗星衰减因子（仅彗星模式需要）
             enable_gap_filling: 是否启用间隙填充
             file_extension: 文件扩展名（默认 tif）
+            has_mask: 是否使用了天空蒙版
+            fg_mode: 地景堆栈模式（仅 has_mask=True 时生效）
 
         Returns:
             输出文件名
@@ -93,7 +97,13 @@ class FileNamingService:
 
         gap_suffix = "_GapFilled" if enable_gap_filling else ""
 
-        filename = f"{range_str}_{mode_name}{tail_suffix}{gap_suffix}.{file_extension}"
+        mask_suffix = ""
+        if has_mask:
+            mask_suffix = "_Mask"
+            if fg_mode == StackMode.COMET:
+                mask_suffix += "_FgComet"
+
+        filename = f"{range_str}_{mode_name}{tail_suffix}{gap_suffix}{mask_suffix}.{file_extension}"
 
         return filename
 

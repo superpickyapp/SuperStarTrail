@@ -314,6 +314,8 @@ def cmd_stack(args):
         stack_mode=stack_mode,
         enable_gap_filling=args.fill_gaps,
         comet_fade_factor=args.fade if stack_mode == StackMode.COMET else None,
+        has_mask=args.mask is not None,
+        fg_mode=fg_mode if args.mask is not None else None,
     )
     tiff_path = output_dir / output_filename
     print(f"保存 TIFF: {tiff_path.name} ...")

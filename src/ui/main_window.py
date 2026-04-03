@@ -790,13 +790,16 @@ class MainWindow(QMainWindow):
         if not all_files:
             return "star_trail.tif"
 
+        mask_path = self.file_list_panel.get_mask_path()
         return FileNamingService.generate_output_filename(
             file_paths=all_files,
             stack_mode=self.params_panel.get_stack_mode(),
             comet_fade_factor=self.params_panel.get_comet_fade_factor()
                 if self.params_panel.get_stack_mode() == StackMode.COMET else None,
             enable_gap_filling=self.params_panel.is_gap_filling_enabled(),
-            file_extension="tif"
+            file_extension="tif",
+            has_mask=mask_path is not None,
+            fg_mode=self.params_panel.get_fg_mode() if mask_path is not None else None,
         )
 
     def on_timelapse_generated(self, video_path: str):
