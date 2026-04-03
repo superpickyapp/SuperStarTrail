@@ -46,9 +46,20 @@ def test_load_white_black_values(tmp_png):
 
 
 def test_load_resize_to_target(tmp_png):
-    """load() 应将蒙版 resize 到 target_shape，不做额外旋转"""
+    """load() 应将蒙版 resize 到 target_shape"""
     result = MaskProcessor.load(tmp_png, target_shape=(300, 600))
     assert result.shape == (300, 600)
+
+
+def test_load_rotation_90_swaps_dims(tmp_path):
+    """rotation=90 后蒙版宽高互换，与图像旋转保持一致"""
+    mask_array = np.zeros((100, 200), dtype=np.uint8)
+    img = Image.fromarray(mask_array, mode='L')
+    path = tmp_path / "mask.png"
+    img.save(path)
+    # 竖向蒙版(100,200) + rotation=90 → 横向(200,100)
+    result = MaskProcessor.load(path, target_shape=(200, 100), rotation=90)
+    assert result.shape == (200, 100)
 
 
 def test_load_file_not_found():

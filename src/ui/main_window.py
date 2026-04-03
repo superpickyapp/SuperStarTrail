@@ -184,7 +184,7 @@ class ProcessThread(QThread):
                     from core.mask_processor import MaskProcessor
                     # 先读第一张图确定目标分辨率
                     first_img = processor.process(self.file_paths[0], rotation=self.rotation, **self.raw_params)
-                    sky_mask = MaskProcessor.load(self.mask_path, target_shape=first_img.shape[:2])
+                    sky_mask = MaskProcessor.load(self.mask_path, target_shape=first_img.shape[:2], rotation=self.rotation)
                     self.log_message.emit(f"已加载蒙版: {self.mask_path.name}，形状: {sky_mask.shape}")
                     logger.info(f"已加载蒙版: {self.mask_path}")
                 except Exception as e:
