@@ -45,9 +45,6 @@ def _fast_maximum(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 class StackingEngine:
     """图像堆栈引擎"""
 
-    # 地景固定使用彗星模式的衰减因子（比天空彗星更慢衰减，保留更多曝光细节）
-    _FG_FADE = 0.97
-
     def __init__(
         self,
         mode: StackMode = StackMode.LIGHTEN,
@@ -63,7 +60,7 @@ class StackingEngine:
         初始化堆栈引擎
 
         Args:
-            mode: 天空区域的堆栈模式（地景固定为 COMET）
+            mode: 天空区域的堆栈模式（地景固定为 AVERAGE）
             enable_gap_filling: 是否启用间隔填充（消除星轨间隔）
             gap_fill_method: 填充方法 ('linear', 'morphological', 'motion_blur')
             gap_size: 要填充的最大间隔大小（像素）
@@ -79,7 +76,7 @@ class StackingEngine:
         # 双轨堆栈状态
         self.sky_mask: Optional[np.ndarray] = sky_mask  # (H, W) float32
         self.sky_result: Optional[np.ndarray] = None    # 天空轨道
-        self.fg_result: Optional[np.ndarray] = None     # 地景轨道（固定 COMET）
+        self.fg_result: Optional[np.ndarray] = None     # 地景轨道（固定 AVERAGE）
         self.enable_gap_filling = enable_gap_filling
         self.gap_filler = None
         self.gap_fill_method = gap_fill_method
@@ -183,11 +180,8 @@ class StackingEngine:
                     )
                 self.sky_result = sky_new
 
-                # 地景轨道：固定彗星，fade=_FG_FADE
-                self.fg_result = (
-                    self.fg_result * self._FG_FADE
-                    + img_float * (1 - self._FG_FADE)
-                )
+                # 地景轨道：固定增量平均，降噪最佳
+                self.fg_result = (self.fg_result * self.count + img_float) / (self.count + 1)
 
         self.count += 1
 
