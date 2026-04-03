@@ -84,7 +84,8 @@ class ParametersPanel(QWidget):
 
         # 地景模式（使用蒙版时生效）
         fg_layout = QHBoxLayout()
-        fg_layout.addWidget(QLabel("地景模式:"))
+        self.label_fg_mode = QLabel("地景模式:")
+        fg_layout.addWidget(self.label_fg_mode)
         self.combo_fg_mode = QComboBox()
         _fg_items = [
             ("平均值",
@@ -101,6 +102,10 @@ class ParametersPanel(QWidget):
         self.combo_fg_mode.setToolTip("使用蒙版时，地景区域的堆栈算法")
         fg_layout.addWidget(self.combo_fg_mode, 1)
         params_layout.addLayout(fg_layout)
+
+        # 默认隐藏，选了蒙版才显示
+        self.label_fg_mode.hide()
+        self.combo_fg_mode.hide()
 
         # 选项（间隔填充 + 两种延时视频，放在一行）
         options_layout = QHBoxLayout()
@@ -179,6 +184,11 @@ class ParametersPanel(QWidget):
             2: 0.98,  # 长
         }
         return fade_map[self.combo_comet_tail.currentIndex()]
+
+    def set_fg_mode_visible(self, visible: bool):
+        """有蒙版时显示地景模式，无蒙版时隐藏"""
+        self.label_fg_mode.setVisible(visible)
+        self.combo_fg_mode.setVisible(visible)
 
     def get_fg_mode(self) -> StackMode:
         """获取地景堆栈模式（使用蒙版时生效）"""

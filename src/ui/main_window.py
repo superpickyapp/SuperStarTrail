@@ -549,6 +549,9 @@ class MainWindow(QMainWindow):
         self.file_list_panel.file_clicked.connect(self._preview_single_file)
         self.file_list_panel.rotation_changed.connect(self._on_rotation_changed_preview)
         self.file_list_panel.mask_path_changed.connect(self._on_mask_path_changed)
+        self.file_list_panel.mask_path_changed.connect(
+            lambda p: self.params_panel.set_fg_mode_visible(p is not None)
+        )
 
         # ControlPanel 信号
         self.control_panel.start_clicked.connect(self.start_processing)
