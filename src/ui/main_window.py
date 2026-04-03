@@ -704,6 +704,8 @@ class MainWindow(QMainWindow):
 
     def processing_cancelled(self):
         """用户取消处理后恢复 UI 状态"""
+        if self.process_thread:
+            self.process_thread.deleteLater()  # 转交 Qt 管理生命周期，避免 GC 提前销毁
         self.process_thread = None
         self.control_panel.set_idle_state(can_start=True)
         self.control_panel.update_status("已取消")
@@ -711,7 +713,9 @@ class MainWindow(QMainWindow):
     def processing_finished(self, result: np.ndarray):
         """堆栈完成 —— 启动后台保存线程，不阻塞主线程（C7）"""
         self.result_image = result
-        self.process_thread = None  # 允许白平衡改变时触发预览刷新
+        if self.process_thread:
+            self.process_thread.deleteLater()  # 转交 Qt 管理生命周期，避免 GC 提前销毁
+        self.process_thread = None
         self.preview_panel.update_preview(result)
 
         # 确定输出目录和文件路径
