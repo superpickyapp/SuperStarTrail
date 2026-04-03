@@ -176,7 +176,6 @@ class ProcessThread(QThread):
                 milkyway_timelapse_generator = TimelapseGenerator(
                     output_path=milkyway_timelapse_path,
                     fps=self.video_fps,
-                    resolution=(3840, 2160)
                 )
 
             # 加载蒙版（如有）

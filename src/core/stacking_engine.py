@@ -93,7 +93,6 @@ class StackingEngine:
             self.timelapse_generator = TimelapseGenerator(
                 output_path=timelapse_output_path,
                 fps=video_fps,
-                resolution=(3840, 2160)
             )
 
         # 如果启用间隔填充，初始化填充器

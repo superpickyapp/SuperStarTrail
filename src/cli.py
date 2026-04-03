@@ -182,7 +182,6 @@ def cmd_stack(args):
         milkyway_generator = TimelapseGenerator(
             output_path=milkyway_path,
             fps=args.fps,
-            resolution=(3840, 2160),
         )
 
     # 加载天空蒙版（如有）
