@@ -197,6 +197,7 @@ def cmd_stack(args):
         print(f"  蒙版       : {mask_path.name}  形状={sky_mask.shape}")
 
     # 初始化引擎
+    fg_mode = StackMode.COMET if getattr(args, 'fg_mode', 'average') == 'comet' else StackMode.AVERAGE
     engine = StackingEngine(
         stack_mode,
         enable_gap_filling=args.fill_gaps,
@@ -206,6 +207,7 @@ def cmd_stack(args):
         timelapse_output_path=timelapse_output_path,
         video_fps=args.fps,
         sky_mask=sky_mask,
+        fg_mode=fg_mode,
     )
 
     if stack_mode == StackMode.COMET:
@@ -424,7 +426,10 @@ def build_parser():
                          choices=[0, 90, 180, 270],
                          help="顺时针旋转角度，竖拍素材用 90 或 270（默认: 0）")
     p_stack.add_argument("--mask", default=None,
-                         help="天空蒙版 PNG 路径（白=天空用所选模式，黑=地景固定 COMET）")
+                         help="天空蒙版 PNG 路径（白=天空用所选模式，黑=地景用 --fg-mode）")
+    p_stack.add_argument("--fg-mode", default="average",
+                         choices=["average", "comet"],
+                         help="蒙版地景区域的堆栈模式（默认: average）")
 
     # ── export ────────────────────────────────
     p_export = sub.add_parser("export", help="转换/导出图像")

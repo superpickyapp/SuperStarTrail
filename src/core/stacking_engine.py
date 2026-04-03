@@ -55,12 +55,14 @@ class StackingEngine:
         timelapse_output_path: Optional[Path] = None,
         video_fps: int = 30,
         sky_mask: Optional[np.ndarray] = None,
+        fg_mode: StackMode = StackMode.AVERAGE,
     ):
         """
         初始化堆栈引擎
 
         Args:
-            mode: 天空区域的堆栈模式（地景固定为 AVERAGE）
+            mode:    天空区域的堆栈模式
+            fg_mode: 地景区域的堆栈模式（仅 sky_mask 存在时生效，默认 AVERAGE）
             enable_gap_filling: 是否启用间隔填充（消除星轨间隔）
             gap_fill_method: 填充方法 ('linear', 'morphological', 'motion_blur')
             gap_size: 要填充的最大间隔大小（像素）
@@ -76,7 +78,8 @@ class StackingEngine:
         # 双轨堆栈状态
         self.sky_mask: Optional[np.ndarray] = sky_mask  # (H, W) float32
         self.sky_result: Optional[np.ndarray] = None    # 天空轨道
-        self.fg_result: Optional[np.ndarray] = None     # 地景轨道（固定 AVERAGE）
+        self.fg_mode: StackMode = fg_mode               # 地景堆栈模式
+        self.fg_result: Optional[np.ndarray] = None     # 地景轨道
         self.enable_gap_filling = enable_gap_filling
         self.gap_filler = None
         self.gap_fill_method = gap_fill_method
@@ -180,8 +183,14 @@ class StackingEngine:
                     )
                 self.sky_result = sky_new
 
-                # 地景轨道：固定增量平均，降噪最佳
-                self.fg_result = (self.fg_result * self.count + img_float) / (self.count + 1)
+                # 地景轨道：按用户选择的 fg_mode 处理
+                if self.fg_mode == StackMode.COMET:
+                    self.fg_result = (
+                        self.fg_result * self.comet_fade_factor
+                        + img_float * (1 - self.comet_fade_factor)
+                    )
+                else:  # AVERAGE（默认）
+                    self.fg_result = (self.fg_result * self.count + img_float) / (self.count + 1)
 
         self.count += 1
 

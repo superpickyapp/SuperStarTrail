@@ -82,6 +82,26 @@ class ParametersPanel(QWidget):
         self.label_comet_tail.hide()
         self.combo_comet_tail.hide()
 
+        # 地景模式（使用蒙版时生效）
+        fg_layout = QHBoxLayout()
+        fg_layout.addWidget(QLabel("地景模式:"))
+        self.combo_fg_mode = QComboBox()
+        _fg_items = [
+            ("平均值",
+             "所有帧平均 — 降噪最佳，曝光自然\n推荐：静止地景（岩石、树木）"),
+            ("彗星",
+             "指数加权移动平均 — 偏向最近帧\n适合：地景有轻微移动（草、水面）"),
+        ]
+        for text, tip in _fg_items:
+            self.combo_fg_mode.addItem(text)
+            self.combo_fg_mode.setItemData(
+                self.combo_fg_mode.count() - 1, tip, 3
+            )
+        self.combo_fg_mode.setCurrentIndex(0)  # 默认平均值
+        self.combo_fg_mode.setToolTip("使用蒙版时，地景区域的堆栈算法")
+        fg_layout.addWidget(self.combo_fg_mode, 1)
+        params_layout.addLayout(fg_layout)
+
         # 选项（间隔填充 + 两种延时视频，放在一行）
         options_layout = QHBoxLayout()
 
@@ -159,6 +179,10 @@ class ParametersPanel(QWidget):
             2: 0.98,  # 长
         }
         return fade_map[self.combo_comet_tail.currentIndex()]
+
+    def get_fg_mode(self) -> StackMode:
+        """获取地景堆栈模式（使用蒙版时生效）"""
+        return StackMode.AVERAGE if self.combo_fg_mode.currentIndex() == 0 else StackMode.COMET
 
     def is_gap_filling_enabled(self) -> bool:
         """是否启用间隔填充"""

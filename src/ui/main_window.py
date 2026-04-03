@@ -108,6 +108,7 @@ class ProcessThread(QThread):
         enable_satellite_removal: bool = False,
         rotation: int = 0,
         mask_path: Optional[Path] = None,
+        fg_mode: "StackMode" = None,
     ):
         super().__init__()
         self.file_paths = file_paths
@@ -125,6 +126,7 @@ class ProcessThread(QThread):
         self.enable_satellite_removal = enable_satellite_removal
         self.rotation = rotation
         self.mask_path = mask_path
+        self.fg_mode = fg_mode
         self._stop_event = Event()  # 使用线程安全的 Event 替代布尔标志
 
     def run(self):
@@ -200,6 +202,7 @@ class ProcessThread(QThread):
                 timelapse_output_path=timelapse_output_path,
                 video_fps=self.video_fps,
                 sky_mask=sky_mask,
+                fg_mode=self.fg_mode if self.fg_mode is not None else StackMode.AVERAGE,
             )
 
             # 如果是彗星模式，设置衰减因子
@@ -677,6 +680,7 @@ class MainWindow(QMainWindow):
             enable_satellite_removal=True,
             rotation=self.file_list_panel.get_rotation(),
             mask_path=self.file_list_panel.get_mask_path(),
+            fg_mode=self.params_panel.get_fg_mode(),
         )
 
         # 连接信号
