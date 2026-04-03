@@ -5,7 +5,7 @@
 """
 
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from threading import Event
 from PyQt5.QtWidgets import (
     QMainWindow,
@@ -107,6 +107,8 @@ class ProcessThread(QThread):
         translator = None,
         enable_satellite_removal: bool = False,
         rotation: int = 0,
+        mask_path: Optional[Path] = None,
+        fg_mode: "StackMode" = None,
     ):
         super().__init__()
         self.file_paths = file_paths
@@ -123,6 +125,8 @@ class ProcessThread(QThread):
         self.video_fps = video_fps
         self.enable_satellite_removal = enable_satellite_removal
         self.rotation = rotation
+        self.mask_path = mask_path
+        self.fg_mode = fg_mode
         self._stop_event = Event()  # 使用线程安全的 Event 替代布尔标志
 
     def run(self):
@@ -172,8 +176,21 @@ class ProcessThread(QThread):
                 milkyway_timelapse_generator = TimelapseGenerator(
                     output_path=milkyway_timelapse_path,
                     fps=self.video_fps,
-                    resolution=(3840, 2160)
                 )
+
+            # 加载蒙版（如有）
+            sky_mask = None
+            if self.mask_path is not None:
+                try:
+                    from core.mask_processor import MaskProcessor
+                    # 先读第一张图确定目标分辨率
+                    first_img = processor.process(self.file_paths[0], rotation=self.rotation, **self.raw_params)
+                    sky_mask = MaskProcessor.load(self.mask_path, target_shape=first_img.shape[:2], rotation=self.rotation)
+                    self.log_message.emit(f"已加载蒙版: {self.mask_path.name}，形状: {sky_mask.shape}")
+                    logger.info(f"已加载蒙版: {self.mask_path}")
+                except Exception as e:
+                    self.log_message.emit(f"⚠️  蒙版加载失败，将跳过双轨堆栈: {e}")
+                    logger.warning(f"蒙版加载失败: {e}")
 
             engine = StackingEngine(
                 self.stack_mode,
@@ -183,6 +200,8 @@ class ProcessThread(QThread):
                 enable_timelapse=self.enable_timelapse,
                 timelapse_output_path=timelapse_output_path,
                 video_fps=self.video_fps,
+                sky_mask=sky_mask,
+                fg_mode=self.fg_mode if self.fg_mode is not None else StackMode.AVERAGE,
             )
 
             # 如果是彗星模式，设置衰减因子
@@ -236,6 +255,9 @@ class ProcessThread(QThread):
                 from core.satellite_filter import SatelliteFilter
                 sat_filter = SatelliteFilter()
 
+            # 若蒙版加载时已处理第一张图，缓存以避免重复 I/O
+            _cached_first_img = first_img if sky_mask is not None and 'first_img' in dir() else None
+
             for i, path in enumerate(self.file_paths):
                 if self._stop_event.is_set():
                     logger.warning("用户取消处理")
@@ -249,7 +271,10 @@ class ProcessThread(QThread):
                     logger.info(log_msg)
                     self.log_message.emit(log_msg)
 
-                    img = processor.process(path, rotation=self.rotation, **self.raw_params)
+                    if i == 0 and _cached_first_img is not None:
+                        img = _cached_first_img
+                    else:
+                        img = processor.process(path, rotation=self.rotation, **self.raw_params)
 
                     # 如果启用银河延时视频，添加此帧
                     if milkyway_timelapse_generator:
@@ -461,6 +486,7 @@ class MainWindow(QMainWindow):
         self.timelapse_video_path: Path = None
         self._current_preview_file: Path = None  # 当前预览的文件（用于实时WB更新）
         self._preview_thread: PreviewThread = None  # C6: 预览子线程
+        self._old_preview_threads: list = []        # 保持旧线程引用直到其真正退出
         self._save_thread: SaveThread = None        # C7: 保存子线程
         self._pending_save_output_dir: Path = None  # C7: 保存完成后用于弹窗
 
@@ -520,6 +546,11 @@ class MainWindow(QMainWindow):
         # FileListPanel 信号
         self.file_list_panel.files_selected.connect(self._on_files_selected)
         self.file_list_panel.file_clicked.connect(self._preview_single_file)
+        self.file_list_panel.rotation_changed.connect(self._on_rotation_changed_preview)
+        self.file_list_panel.mask_path_changed.connect(self._on_mask_path_changed)
+        self.file_list_panel.mask_path_changed.connect(
+            lambda p: self.params_panel.set_fg_mode_visible(p is not None)
+        )
 
         # ControlPanel 信号
         self.control_panel.start_clicked.connect(self.start_processing)
@@ -538,25 +569,57 @@ class MainWindow(QMainWindow):
         self._current_preview_file = file_path
         self.preview_panel.reset_preview_cache()
 
-        # 若上一个预览线程仍在运行，断开其信号（结果将被丢弃）
+        # 若上一个预览线程仍在运行，断开信号并让它自行结束
+        # 连接 finished → deleteLater 确保 Qt 持有对象直到线程真正退出
         if self._preview_thread is not None and self._preview_thread.isRunning():
+            # 断开信号使结果被丢弃，但保持 Python 引用直到线程真正退出
             self._preview_thread.preview_ready.disconnect()
             self._preview_thread.preview_error.disconnect()
+            self._old_preview_threads.append(self._preview_thread)
 
         self._preview_thread = PreviewThread(
             file_path, {}, rotation=self.file_list_panel.get_rotation()
         )
         self._preview_thread.preview_ready.connect(self._on_preview_ready)
         self._preview_thread.preview_error.connect(self._on_preview_error)
+        self._preview_thread.finished.connect(self._prune_old_preview_threads)
         self._preview_thread.start()
 
     def _on_preview_ready(self, img: np.ndarray, file_path: Path):
         """预览线程完成回调"""
-        # 若用户已切换到其他文件，忽略过期结果
         if file_path != self._current_preview_file:
             return
-        self.preview_panel.update_preview(img)
+
+        # 如果有蒙版，加载并传给预览做叠加显示
+        mask = None
+        mask_path = self.file_list_panel.get_mask_path()
+        if mask_path is not None:
+            try:
+                from core.mask_processor import MaskProcessor
+                mask = MaskProcessor.load(
+                    mask_path,
+                    target_shape=img.shape[:2],
+                    rotation=self.file_list_panel.get_rotation(),
+                )
+            except Exception as e:
+                logger.warning(f"蒙版预览加载失败: {e}")
+
+        self.preview_panel.update_preview(img, mask=mask)
         logger.info(f"预览文件: {file_path.name}")
+
+    def _prune_old_preview_threads(self):
+        """线程结束后从列表中移除已完成的旧线程，允许 GC 回收"""
+        self._old_preview_threads = [t for t in self._old_preview_threads if t.isRunning()]
+
+    def _on_rotation_changed_preview(self, _angle: int):
+        """旋转角度变化时刷新预览（含蒙版叠加）"""
+        if self._current_preview_file is not None:
+            self._preview_single_file(self._current_preview_file)
+
+    def _on_mask_path_changed(self, _mask_path):
+        """蒙版选择/清除时刷新预览"""
+        if self._current_preview_file is not None:
+            self._preview_single_file(self._current_preview_file)
 
     def _on_preview_error(self, error_msg: str, file_path: Path):
         """预览线程出错回调"""
@@ -618,6 +681,8 @@ class MainWindow(QMainWindow):
             translator=self.tr,
             enable_satellite_removal=True,
             rotation=self.file_list_panel.get_rotation(),
+            mask_path=self.file_list_panel.get_mask_path(),
+            fg_mode=self.params_panel.get_fg_mode(),
         )
 
         # 连接信号
@@ -641,6 +706,8 @@ class MainWindow(QMainWindow):
 
     def processing_cancelled(self):
         """用户取消处理后恢复 UI 状态"""
+        if self.process_thread:
+            self.process_thread.deleteLater()  # 转交 Qt 管理生命周期，避免 GC 提前销毁
         self.process_thread = None
         self.control_panel.set_idle_state(can_start=True)
         self.control_panel.update_status("已取消")
@@ -648,7 +715,9 @@ class MainWindow(QMainWindow):
     def processing_finished(self, result: np.ndarray):
         """堆栈完成 —— 启动后台保存线程，不阻塞主线程（C7）"""
         self.result_image = result
-        self.process_thread = None  # 允许白平衡改变时触发预览刷新
+        if self.process_thread:
+            self.process_thread.deleteLater()  # 转交 Qt 管理生命周期，避免 GC 提前销毁
+        self.process_thread = None
         self.preview_panel.update_preview(result)
 
         # 确定输出目录和文件路径
@@ -723,13 +792,16 @@ class MainWindow(QMainWindow):
         if not all_files:
             return "star_trail.tif"
 
+        mask_path = self.file_list_panel.get_mask_path()
         return FileNamingService.generate_output_filename(
             file_paths=all_files,
             stack_mode=self.params_panel.get_stack_mode(),
             comet_fade_factor=self.params_panel.get_comet_fade_factor()
                 if self.params_panel.get_stack_mode() == StackMode.COMET else None,
             enable_gap_filling=self.params_panel.is_gap_filling_enabled(),
-            file_extension="tif"
+            file_extension="tif",
+            has_mask=mask_path is not None,
+            fg_mode=self.params_panel.get_fg_mode() if mask_path is not None else None,
         )
 
     def on_timelapse_generated(self, video_path: str):

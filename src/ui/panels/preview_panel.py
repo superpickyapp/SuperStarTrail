@@ -161,8 +161,14 @@ class PreviewPanel(QWidget):
         scale = max(float(v_high - v_low), 1.0)
         return np.clip((image.astype(np.float32) - v_low) / scale * 255, 0, 255).astype(np.uint8)
 
-    def update_preview(self, image: np.ndarray):
-        """更新预览图像（自动曝光优化）"""
+    def update_preview(self, image: np.ndarray, mask: Optional[np.ndarray] = None):
+        """更新预览图像（自动曝光优化）
+
+        Args:
+            image: uint16 RGB 图像数组
+            mask:  可选 float32 蒙版 (H, W)，1.0=天空，0.0=地景；
+                   有蒙版时叠加半透明蓝色覆盖天空区域供确认
+        """
         import cv2
 
         # 从配置获取预览参数
@@ -172,7 +178,6 @@ class PreviewPanel(QWidget):
         # 先缩放再做亮度拉伸，大幅提升速度
         h, w = image.shape[:2]
 
-        # 先缩小图像以加快后续处理
         if max(h, w) > max_size:
             scale = max_size / max(h, w)
             new_h, new_w = int(h * scale), int(w * scale)
@@ -184,7 +189,18 @@ class PreviewPanel(QWidget):
         if image_small.dtype == np.uint16:
             img_8bit = self._stretch_for_preview(image_small, settings)
         else:
-            img_8bit = image_small
+            img_8bit = image_small.copy()
+
+        # 叠加蒙版预览：天空区域加半透明蓝色
+        if mask is not None:
+            ph, pw = img_8bit.shape[:2]
+            mask_small = cv2.resize(mask, (pw, ph), interpolation=cv2.INTER_AREA)
+            alpha = (mask_small * 0.45).astype(np.float32)[:, :, np.newaxis]  # 45% 透明度
+            tint = np.zeros_like(img_8bit, dtype=np.float32)
+            tint[:, :, 2] = 200  # 纯蓝色覆盖层
+            img_8bit = np.clip(
+                img_8bit.astype(np.float32) * (1 - alpha) + tint * alpha, 0, 255
+            ).astype(np.uint8)
 
         # 转换为 QPixmap
         h, w, c = img_8bit.shape

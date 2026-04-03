@@ -17,11 +17,14 @@ logger = setup_logger(__name__)
 class TimelapseGenerator:
     """延时视频生成器"""
 
+    # 目标像素总量（约 4K）：从第一帧自动推算分辨率时使用
+    _TARGET_PIXELS = 3840 * 2160
+
     def __init__(
         self,
         output_path: Path,
         fps: int = 25,
-        resolution: Tuple[int, int] = (3840, 2160),  # 4K
+        resolution: Optional[Tuple[int, int]] = None,  # None = 自动从第一帧检测
         temp_dir: Optional[Path] = None
     ):
         """
@@ -30,12 +33,12 @@ class TimelapseGenerator:
         Args:
             output_path: 输出视频路径（.mp4）
             fps: 帧率（默认 25 FPS）
-            resolution: 视频分辨率（默认 4K）
+            resolution: 视频分辨率 (width, height)；None 表示自动按图像真实比例计算
             temp_dir: 临时帧目录（如果不指定，使用 output_path 同级目录）
         """
         self.output_path = Path(output_path)
         self.fps = fps
-        self.resolution = resolution  # (width, height)
+        self.resolution = resolution  # None 直到第一帧进来时确定
 
         # 临时目录
         if temp_dir is None:
@@ -48,7 +51,7 @@ class TimelapseGenerator:
         self.frame_count = 0
         self.frame_paths = []
 
-        logger.info(f"延时视频生成器初始化: {self.fps} FPS, {self.resolution[0]}×{self.resolution[1]}")
+        logger.info(f"延时视频生成器初始化: {self.fps} FPS, 分辨率={'自动' if self.resolution is None else f'{self.resolution[0]}×{self.resolution[1]}'}")
         logger.info(f"临时帧目录: {self.temp_dir}")
 
     def add_frame(self, image: np.ndarray) -> None:
@@ -61,7 +64,13 @@ class TimelapseGenerator:
         # 转换为 8-bit（使用 percentile-based 拉伸，和预览一样）
         img_8bit = self._convert_to_8bit(image)
 
-        # 调整尺寸到 4K 16:9（中心裁切）
+        # 第一帧：自动确定输出分辨率（保持真实比例，约 4K 总像素量）
+        if self.resolution is None:
+            h, w = img_8bit.shape[:2]
+            self.resolution = self._compute_resolution(w, h)
+            logger.info(f"自动检测分辨率: {w}×{h} → 输出 {self.resolution[0]}×{self.resolution[1]}")
+
+        # 调整尺寸到目标分辨率（无裁切，保持完整画面）
         img_resized = self._resize_to_target(img_8bit)
 
         # 保存为 JPEG
@@ -138,9 +147,24 @@ class TimelapseGenerator:
 
         return img_8bit
 
+    @classmethod
+    def _compute_resolution(cls, w: int, h: int) -> Tuple[int, int]:
+        """
+        按图像真实比例计算输出分辨率，总像素量约等于 4K。
+        宽高均取偶数（视频编码要求）。
+        """
+        import math
+        ratio = w / h
+        out_w = int(math.sqrt(cls._TARGET_PIXELS * ratio))
+        out_h = int(cls._TARGET_PIXELS / out_w)
+        # 对齐到偶数
+        out_w = out_w + (out_w % 2)
+        out_h = out_h + (out_h % 2)
+        return (out_w, out_h)
+
     def _resize_to_target(self, image: np.ndarray) -> np.ndarray:
         """
-        将图像调整到目标分辨率（16:9，中心裁切）
+        将图像缩放到目标分辨率，保持完整画面（不裁切）。
 
         Args:
             image: 8-bit RGB 图像 (H, W, 3)
@@ -148,26 +172,7 @@ class TimelapseGenerator:
         Returns:
             调整后的图像
         """
-        h, w = image.shape[:2]
-        target_w, target_h = self.resolution
-        target_ratio = target_w / target_h  # 16:9 = 1.777...
-        current_ratio = w / h
-
-        # 中心裁切到 16:9
-        if current_ratio > target_ratio:
-            # 图像太宽，裁切左右
-            new_w = int(h * target_ratio)
-            x_offset = (w - new_w) // 2
-            cropped = image[:, x_offset:x_offset + new_w]
-        else:
-            # 图像太高，裁切上下
-            new_h = int(w / target_ratio)
-            y_offset = (h - new_h) // 2
-            cropped = image[y_offset:y_offset + new_h, :]
-
-        # 缩放到目标分辨率
-        resized = cv2.resize(cropped, self.resolution, interpolation=cv2.INTER_AREA)
-
+        resized = cv2.resize(image, self.resolution, interpolation=cv2.INTER_AREA)
         return resized
 
     def generate_video(self, cleanup: bool = True) -> bool:
