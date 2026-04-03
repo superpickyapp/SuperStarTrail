@@ -543,6 +543,8 @@ class MainWindow(QMainWindow):
         # FileListPanel 信号
         self.file_list_panel.files_selected.connect(self._on_files_selected)
         self.file_list_panel.file_clicked.connect(self._preview_single_file)
+        self.file_list_panel.rotation_changed.connect(self._on_rotation_changed_preview)
+        self.file_list_panel.mask_path_changed.connect(self._on_mask_path_changed)
 
         # ControlPanel 信号
         self.control_panel.start_clicked.connect(self.start_processing)
@@ -575,11 +577,35 @@ class MainWindow(QMainWindow):
 
     def _on_preview_ready(self, img: np.ndarray, file_path: Path):
         """预览线程完成回调"""
-        # 若用户已切换到其他文件，忽略过期结果
         if file_path != self._current_preview_file:
             return
-        self.preview_panel.update_preview(img)
+
+        # 如果有蒙版，加载并传给预览做叠加显示
+        mask = None
+        mask_path = self.file_list_panel.get_mask_path()
+        if mask_path is not None:
+            try:
+                from core.mask_processor import MaskProcessor
+                mask = MaskProcessor.load(
+                    mask_path,
+                    target_shape=img.shape[:2],
+                    rotation=self.file_list_panel.get_rotation(),
+                )
+            except Exception as e:
+                logger.warning(f"蒙版预览加载失败: {e}")
+
+        self.preview_panel.update_preview(img, mask=mask)
         logger.info(f"预览文件: {file_path.name}")
+
+    def _on_rotation_changed_preview(self, _angle: int):
+        """旋转角度变化时刷新预览（含蒙版叠加）"""
+        if self._current_preview_file is not None:
+            self._preview_single_file(self._current_preview_file)
+
+    def _on_mask_path_changed(self, _mask_path):
+        """蒙版选择/清除时刷新预览"""
+        if self._current_preview_file is not None:
+            self._preview_single_file(self._current_preview_file)
 
     def _on_preview_error(self, error_msg: str, file_path: Path):
         """预览线程出错回调"""
