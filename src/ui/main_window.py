@@ -484,6 +484,7 @@ class MainWindow(QMainWindow):
         self.timelapse_video_path: Path = None
         self._current_preview_file: Path = None  # 当前预览的文件（用于实时WB更新）
         self._preview_thread: PreviewThread = None  # C6: 预览子线程
+        self._old_preview_threads: list = []        # 保持旧线程引用直到其真正退出
         self._save_thread: SaveThread = None        # C7: 保存子线程
         self._pending_save_output_dir: Path = None  # C7: 保存完成后用于弹窗
 
@@ -566,17 +567,17 @@ class MainWindow(QMainWindow):
         # 若上一个预览线程仍在运行，断开信号并让它自行结束
         # 连接 finished → deleteLater 确保 Qt 持有对象直到线程真正退出
         if self._preview_thread is not None and self._preview_thread.isRunning():
+            # 断开信号使结果被丢弃，但保持 Python 引用直到线程真正退出
             self._preview_thread.preview_ready.disconnect()
             self._preview_thread.preview_error.disconnect()
-            self._preview_thread.finished.connect(self._preview_thread.deleteLater)
-            self._preview_thread = None  # 释放 Python 引用，Qt 仍持有
+            self._old_preview_threads.append(self._preview_thread)
 
         self._preview_thread = PreviewThread(
             file_path, {}, rotation=self.file_list_panel.get_rotation()
         )
         self._preview_thread.preview_ready.connect(self._on_preview_ready)
         self._preview_thread.preview_error.connect(self._on_preview_error)
-        self._preview_thread.finished.connect(self._preview_thread.deleteLater)
+        self._preview_thread.finished.connect(self._prune_old_preview_threads)
         self._preview_thread.start()
 
     def _on_preview_ready(self, img: np.ndarray, file_path: Path):
@@ -600,6 +601,10 @@ class MainWindow(QMainWindow):
 
         self.preview_panel.update_preview(img, mask=mask)
         logger.info(f"预览文件: {file_path.name}")
+
+    def _prune_old_preview_threads(self):
+        """线程结束后从列表中移除已完成的旧线程，允许 GC 回收"""
+        self._old_preview_threads = [t for t in self._old_preview_threads if t.isRunning()]
 
     def _on_rotation_changed_preview(self, _angle: int):
         """旋转角度变化时刷新预览（含蒙版叠加）"""
