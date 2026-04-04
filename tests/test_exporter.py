@@ -50,6 +50,14 @@ class TestImageExporter(unittest.TestCase):
         # 拉伸后应该有更大的动态范围
         self.assertGreater(stretched.max(), img.max() * 0.5)
 
+    def test_apply_stretch_flat_image_returns_original(self):
+        """平坦图像不应因除零而损坏"""
+        img = np.full((16, 16, 3), 2048, dtype=np.uint16)
+
+        stretched = ImageExporter.apply_stretch(img)
+
+        np.testing.assert_array_equal(stretched, img)
+
     def test_save_tiff_16bit(self):
         """测试保存 16-bit TIFF"""
         output_path = self.temp_dir / "test_16bit.tif"

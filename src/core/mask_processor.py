@@ -47,7 +47,10 @@ class MaskProcessor:
 
         # 应用与图像相同的旋转（蒙版从 RAW 源文件制作，方向与原始一致）
         if rotation:
-            k = {90: 3, 180: 2, 270: 1}[rotation]
+            _rotation_map = {90: 3, 180: 2, 270: 1}
+            if rotation not in _rotation_map:
+                raise ValueError(f"不支持的旋转角度: {rotation}，有效值为 90、180、270")
+            k = _rotation_map[rotation]
             arr = np.rot90(np.array(img), k=k)
             img = Image.fromarray(arr)
 

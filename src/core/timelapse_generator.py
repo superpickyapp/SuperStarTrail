@@ -175,12 +175,13 @@ class TimelapseGenerator:
         resized = cv2.resize(image, self.resolution, interpolation=cv2.INTER_AREA)
         return resized
 
-    def generate_video(self, cleanup: bool = True) -> bool:
+    def generate_video(self, cleanup: bool = True, stop_event=None) -> bool:
         """
         从保存的帧生成视频
 
         Args:
             cleanup: 是否删除临时帧文件
+            stop_event: threading.Event，置位后中断编码并删除半成品文件
 
         Returns:
             是否成功
@@ -229,7 +230,13 @@ class TimelapseGenerator:
 
             # 逐帧写入
             frames_written = 0
+            cancelled = False
             for i, frame_path in enumerate(self.frame_paths):
+                if stop_event is not None and stop_event.is_set():
+                    logger.info(f"用户取消，已编码 {frames_written}/{self.frame_count} 帧")
+                    cancelled = True
+                    break
+
                 # Windows 中文路径兼容：使用 numpy 读取
                 if platform.system() == "Windows":
                     # 使用 numpy.fromfile + cv2.imdecode 处理中文路径
@@ -237,11 +244,11 @@ class TimelapseGenerator:
                     frame = cv2.imdecode(frame_data, cv2.IMREAD_COLOR)
                 else:
                     frame = cv2.imread(str(frame_path))
-                    
+
                 if frame is None:
                     logger.warning(f"无法读取帧: {frame_path}")
                     continue
-                    
+
                 video.write(frame)
                 frames_written += 1
 
@@ -251,9 +258,20 @@ class TimelapseGenerator:
             # 释放视频资源（必须在移动文件前释放）
             video.release()
             video = None
-            
+
+            # 取消时删除半成品文件后直接返回
+            if cancelled:
+                import os
+                target = self.output_path
+                if target.exists():
+                    target.unlink()
+                    logger.info(f"已删除半成品视频: {target}")
+                if cleanup:
+                    self.cleanup_temp_files()
+                return False
+
             logger.info(f"成功写入 {frames_written}/{self.frame_count} 帧")
-            
+
             # Windows: 将临时文件移动到最终位置
             if platform.system() == "Windows" and temp_video_path:
                 import os

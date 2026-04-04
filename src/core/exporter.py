@@ -37,6 +37,10 @@ class ImageExporter:
         low_val = np.percentile(image, p_low)
         high_val = np.percentile(image, p_high)
 
+        # 平坦图像（如暗帧）无需拉伸
+        if high_val <= low_val:
+            return image
+
         # 拉伸到 0-65535
         stretched = np.clip((image - low_val) / (high_val - low_val) * 65535, 0, 65535)
 

@@ -138,6 +138,16 @@ class ParametersPanel(QWidget):
         self.check_enable_timelapse.setChecked(False)  # 默认关闭
         options_layout.addWidget(self.check_enable_timelapse)
 
+        # 去卫星划痕
+        self.check_enable_satellite_removal = QCheckBox("去划痕")
+        self.check_enable_satellite_removal.setToolTip(
+            "自动检测并去除卫星、飞机等直线划痕\n"
+            "注意：流星也会被同时去除\n"
+            "使用 Hough 直线检测，略微增加处理时间"
+        )
+        self.check_enable_satellite_removal.setChecked(False)  # 默认关闭
+        options_layout.addWidget(self.check_enable_satellite_removal)
+
         # 银河延时
         self.check_enable_simple_timelapse = QCheckBox("银河延时")
         self.check_enable_simple_timelapse.setToolTip(
@@ -205,5 +215,9 @@ class ParametersPanel(QWidget):
     def is_simple_timelapse_enabled(self) -> bool:
         """是否启用普通延时视频"""
         return self.check_enable_simple_timelapse.isChecked()
+
+    def is_satellite_removal_enabled(self) -> bool:
+        """是否启用去卫星划痕"""
+        return self.check_enable_satellite_removal.isChecked()
 
 

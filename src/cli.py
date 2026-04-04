@@ -186,6 +186,7 @@ def cmd_stack(args):
 
     # 加载天空蒙版（如有）
     sky_mask = None
+    _first = None
     if args.mask:
         from core.mask_processor import MaskProcessor
         from pathlib import Path as _Path

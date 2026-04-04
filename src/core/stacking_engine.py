@@ -8,6 +8,7 @@ from enum import Enum
 from typing import List, Optional, Callable
 from pathlib import Path
 import numpy as np
+from .cancellation import ProcessingCancelledError
 try:
     from numba import jit
 except (ImportError, OSError):
@@ -78,6 +79,7 @@ class StackingEngine:
         # 双轨堆栈状态
         self.sky_mask: Optional[np.ndarray] = sky_mask  # (H, W) float32
         self.sky_result: Optional[np.ndarray] = None    # 天空轨道
+        self.sky_count = 0                               # 天空/地景轨道独立计数器
         self.fg_mode: StackMode = fg_mode               # 地景堆栈模式
         self.fg_result: Optional[np.ndarray] = None     # 地景轨道
         self.enable_gap_filling = enable_gap_filling
@@ -111,6 +113,7 @@ class StackingEngine:
         self.sky_result = None
         self.fg_result = None
         self.count = 0
+        self.sky_count = 0
 
     def add_image(
         self,
@@ -142,8 +145,14 @@ class StackingEngine:
                 self.result = np.where(mask3, 0.0, self.result)
             # 双轨初始化
             if self.sky_mask is not None:
+                if self.sky_mask.shape != img_float.shape[:2]:
+                    raise ValueError(
+                        f"蒙版尺寸 {self.sky_mask.shape} 与图像尺寸 {img_float.shape[:2]} 不匹配，"
+                        f"请确保蒙版与输入图像分辨率一致"
+                    )
                 self.sky_result = img_float.copy()
                 self.fg_result = img_float.copy()
+                self.sky_count = 1  # 第一帧已写入，计数从 1 开始
         elif img_float.shape != self.result.shape:
             raise ValueError(
                 f"图像尺寸不匹配: 已有堆栈为 {self.result.shape[:2]}，"
@@ -168,28 +177,32 @@ class StackingEngine:
                 )
                 self.result = np.where(mask3, self.result, new_val) if mask3 is not None else new_val
 
-            # 双轨堆栈：天空用 self.mode，地景固定 COMET
+            # 双轨堆栈：天空用 self.mode，地景用 fg_mode
             if self.sky_mask is not None:
                 # 天空轨道
                 if self.mode == StackMode.LIGHTEN:
                     sky_new = _fast_maximum(self.sky_result, img_float)
                 elif self.mode == StackMode.AVERAGE:
-                    sky_new = (self.sky_result * self.count + img_float) / (self.count + 1)
+                    sky_new = (self.sky_result * self.sky_count + img_float) / (self.sky_count + 1)
                 else:  # COMET
                     sky_new = (
                         self.sky_result * self.comet_fade_factor
                         + img_float * (1 - self.comet_fade_factor)
                     )
-                self.sky_result = sky_new
+                # 划痕遮罩：遮罩区域保留旧值，不更新
+                self.sky_result = np.where(mask3, self.sky_result, sky_new) if mask3 is not None else sky_new
 
                 # 地景轨道：按用户选择的 fg_mode 处理
                 if self.fg_mode == StackMode.COMET:
-                    self.fg_result = (
+                    fg_new = (
                         self.fg_result * self.comet_fade_factor
                         + img_float * (1 - self.comet_fade_factor)
                     )
                 else:  # AVERAGE（默认）
-                    self.fg_result = (self.fg_result * self.count + img_float) / (self.count + 1)
+                    fg_new = (self.fg_result * self.sky_count + img_float) / (self.sky_count + 1)
+                self.fg_result = np.where(mask3, self.fg_result, fg_new) if mask3 is not None else fg_new
+
+                self.sky_count += 1
 
         self.count += 1
 
@@ -205,19 +218,28 @@ class StackingEngine:
         # 填充只应该在最终 get_result() 时应用一次
         return self.result.astype(np.uint16)
 
-    def get_result(self, normalize: bool = False, apply_gap_filling: bool = True) -> np.ndarray:
+    def get_result(
+        self,
+        normalize: bool = False,
+        apply_gap_filling: bool = True,
+        stop_event=None,
+    ) -> np.ndarray:
         """
         获取当前堆栈结果
 
         Args:
             normalize: 是否归一化到原始位深
             apply_gap_filling: 是否应用间隔填充（默认 True，预览时应设为 False）
+            stop_event: threading.Event，置位后中断结果生成
 
         Returns:
             堆栈结果数组
         """
         if self.result is None:
             raise ValueError("还没有添加任何图像")
+
+        if stop_event is not None and stop_event.is_set():
+            raise ProcessingCancelledError("用户取消了结果生成")
 
         # 双轨融合：sky_result × mask + fg_result × (1 - mask)
         if self.sky_mask is not None and self.sky_result is not None and self.fg_result is not None:
@@ -249,6 +271,7 @@ class StackingEngine:
                 result,
                 gap_size=self.gap_size,
                 intensity_threshold=0.1,
+                stop_event=stop_event,
             )
             # gap_filler 已经返回 uint16，避免重复转换
             return result_filled
@@ -296,12 +319,13 @@ class StackingEngine:
             raise ValueError("衰减因子必须在 0.0 到 1.0 之间")
         self.comet_fade_factor = factor
 
-    def finalize_timelapse(self, cleanup: bool = True) -> bool:
+    def finalize_timelapse(self, cleanup: bool = True, stop_event=None) -> bool:
         """
         生成最终的延时视频
 
         Args:
             cleanup: 是否删除临时帧文件
+            stop_event: threading.Event，置位后中断编码
 
         Returns:
             是否成功
@@ -309,7 +333,7 @@ class StackingEngine:
         if self.timelapse_generator is None:
             return False
 
-        return self.timelapse_generator.generate_video(cleanup=cleanup)
+        return self.timelapse_generator.generate_video(cleanup=cleanup, stop_event=stop_event)
 
 
 class DarkFrameSubtractor:

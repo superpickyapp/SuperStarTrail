@@ -11,6 +11,7 @@ logger = setup_logger(__name__)
 from typing import List, Tuple, Optional
 import numpy as np
 from scipy import ndimage
+from .cancellation import ProcessingCancelledError
 try:
     from numba import jit
 except (ImportError, OSError):
@@ -39,6 +40,7 @@ class GapFiller:
         image: np.ndarray,
         gap_size: int = 3,
         intensity_threshold: float = 0.1,
+        stop_event=None,
     ) -> np.ndarray:
         """
         填充星轨间隔
@@ -47,26 +49,36 @@ class GapFiller:
             image: 输入图像 (H, W, 3) 或 (H, W)
             gap_size: 要填充的最大间隔大小（像素）
             intensity_threshold: 亮度阈值，低于此值的被认为是间隔
+            stop_event: threading.Event，置位后中断处理
 
         Returns:
             填充后的图像
         """
+        self._raise_if_cancelled(stop_event)
+
         if self.method == "linear":
-            return self._linear_fill(image, gap_size, intensity_threshold)
+            return self._linear_fill(image, gap_size, intensity_threshold, stop_event=stop_event)
         elif self.method == "morphological":
-            return self._morphological_fill(image, gap_size)
+            return self._morphological_fill(image, gap_size, stop_event=stop_event)
         elif self.method == "motion_blur":
-            return self._motion_blur_fill(image, gap_size)
+            return self._motion_blur_fill(image, gap_size, stop_event=stop_event)
         elif self.method == "directional":
-            return self._directional_fill(image, gap_size)
+            return self._directional_fill(image, gap_size, stop_event=stop_event)
         else:
             raise ValueError(f"未知的填充方法: {self.method}")
+
+    @staticmethod
+    def _raise_if_cancelled(stop_event) -> None:
+        """在耗时阶段切换点检查是否已取消。"""
+        if stop_event is not None and stop_event.is_set():
+            raise ProcessingCancelledError("用户取消了间隔填充")
 
     def _linear_fill(
         self,
         image: np.ndarray,
         gap_size: int,
         intensity_threshold: float,
+        stop_event=None,
     ) -> np.ndarray:
         """
         线性插值填充
@@ -78,10 +90,12 @@ class GapFiller:
         # 处理每个通道
         if len(image.shape) == 3:
             for c in range(image.shape[2]):
+                self._raise_if_cancelled(stop_event)
                 result[:, :, c] = self._fill_channel_linear(
                     image[:, :, c], gap_size, intensity_threshold
                 )
         else:
+            self._raise_if_cancelled(stop_event)
             result = self._fill_channel_linear(image, gap_size, intensity_threshold)
 
         return result
@@ -152,7 +166,7 @@ class GapFiller:
 
         return result
 
-    def _morphological_fill(self, image: np.ndarray, gap_size: int) -> np.ndarray:
+    def _morphological_fill(self, image: np.ndarray, gap_size: int, stop_event=None) -> np.ndarray:
         """
         形态学闭运算填充
 
@@ -174,16 +188,18 @@ class GapFiller:
         # 处理每个通道
         if len(image.shape) == 3:
             for c in range(image.shape[2]):
+                self._raise_if_cancelled(stop_event)
                 # 形态学闭运算 = 膨胀 + 腐蚀
                 dilated = ndimage.grey_dilation(image[:, :, c], footprint=kernel)
                 result[:, :, c] = ndimage.grey_erosion(dilated, footprint=kernel)
         else:
+            self._raise_if_cancelled(stop_event)
             dilated = ndimage.grey_dilation(image, footprint=kernel)
             result = ndimage.grey_erosion(dilated, footprint=kernel)
 
         return result
 
-    def _motion_blur_fill(self, image: np.ndarray, gap_size: int) -> np.ndarray:
+    def _motion_blur_fill(self, image: np.ndarray, gap_size: int, stop_event=None) -> np.ndarray:
         """
         运动模糊填充
 
@@ -198,15 +214,17 @@ class GapFiller:
         # 处理每个通道
         if len(image.shape) == 3:
             for c in range(image.shape[2]):
+                self._raise_if_cancelled(stop_event)
                 result[:, :, c] = ndimage.convolve(
                     image[:, :, c], kernel, mode="constant"
                 )
         else:
+            self._raise_if_cancelled(stop_event)
             result = ndimage.convolve(image, kernel, mode="constant")
 
         return result
 
-    def _directional_fill(self, image: np.ndarray, gap_size: int) -> np.ndarray:
+    def _directional_fill(self, image: np.ndarray, gap_size: int, stop_event=None) -> np.ndarray:
         """
         方向自适应填充
 
@@ -220,10 +238,12 @@ class GapFiller:
         # 对每个通道处理
         if len(image.shape) == 3:
             for c in range(image.shape[2]):
+                self._raise_if_cancelled(stop_event)
                 channel_result = image[:, :, c].copy()
 
                 # 对每个角度应用形态学闭运算
                 for angle in angles:
+                    self._raise_if_cancelled(stop_event)
                     # 创建旋转的线性结构元素
                     kernel = self._create_rotated_kernel(gap_size, angle)
 
@@ -239,6 +259,7 @@ class GapFiller:
             channel_result = image.copy()
 
             for angle in angles:
+                self._raise_if_cancelled(stop_event)
                 kernel = self._create_rotated_kernel(gap_size, angle)
                 dilated = ndimage.grey_dilation(image, footprint=kernel)
                 closed = ndimage.grey_erosion(dilated, footprint=kernel)

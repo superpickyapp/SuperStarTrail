@@ -22,6 +22,7 @@ from PyQt5.QtGui import QPixmap, QIcon
 import numpy as np
 
 from core.raw_processor import RawProcessor
+from core.cancellation import ProcessingCancelledError
 from core.stacking_engine import StackingEngine, StackMode
 from utils.logger import setup_logger
 from utils.settings import get_settings
@@ -180,6 +181,7 @@ class ProcessThread(QThread):
 
             # 加载蒙版（如有）
             sky_mask = None
+            first_img = None
             if self.mask_path is not None:
                 try:
                     from core.mask_processor import MaskProcessor
@@ -256,7 +258,7 @@ class ProcessThread(QThread):
                 sat_filter = SatelliteFilter()
 
             # 若蒙版加载时已处理第一张图，缓存以避免重复 I/O
-            _cached_first_img = first_img if sky_mask is not None and 'first_img' in dir() else None
+            _cached_first_img = first_img if sky_mask is not None and first_img is not None else None
 
             for i, path in enumerate(self.file_paths):
                 if self._stop_event.is_set():
@@ -350,22 +352,27 @@ class ProcessThread(QThread):
                 logger.info(f"平均速度: {total_duration/total:.2f} 秒/张")
 
                 # 应用间隔填充（如果启用）
-                if self.enable_gap_filling:
+                if self.enable_gap_filling and not self._stop_event.is_set():
                     self.log_message.emit("-" * 60)
                     self.log_message.emit("正在应用间隔填充...")
                     logger.info(f"-" * 60)
                     logger.info(f"正在应用间隔填充...")
                     gap_start = time.time()
 
-                result = engine.get_result(apply_gap_filling=True)
+                result = engine.get_result(
+                    apply_gap_filling=not self._stop_event.is_set(),
+                    stop_event=self._stop_event,
+                )
+                if self._stop_event.is_set():
+                    raise ProcessingCancelledError("用户取消了后处理")
 
-                if self.enable_gap_filling:
+                if self.enable_gap_filling and not self._stop_event.is_set():
                     gap_duration = time.time() - gap_start
                     self.log_message.emit(f"间隔填充完成，耗时: {gap_duration:.2f} 秒")
                     logger.info(f"间隔填充完成，耗时: {gap_duration:.2f} 秒")
 
-                # 生成星轨延时视频（如果启用）
-                if self.enable_timelapse:
+                # 生成星轨延时视频（如果启用，且未取消）
+                if self.enable_timelapse and not self._stop_event.is_set():
                     self.log_message.emit("-" * 60)
                     self.log_message.emit("正在生成星轨延时视频...")
                     logger.info(f"-" * 60)
@@ -373,7 +380,9 @@ class ProcessThread(QThread):
                     self.status_message.emit("正在生成星轨延时...")
                     timelapse_start = time.time()
 
-                    success = engine.finalize_timelapse(cleanup=True)
+                    success = engine.finalize_timelapse(cleanup=True, stop_event=self._stop_event)
+                    if self._stop_event.is_set():
+                        raise ProcessingCancelledError("用户取消了星轨延时生成")
 
                     if success:
                         timelapse_duration = time.time() - timelapse_start
@@ -387,8 +396,8 @@ class ProcessThread(QThread):
                         self.log_message.emit("❌ 星轨延时视频生成失败")
                         logger.error("星轨延时视频生成失败")
 
-                # 生成银河延时视频（如果启用）
-                if self.enable_simple_timelapse and milkyway_timelapse_generator:
+                # 生成银河延时视频（如果启用，且未取消）
+                if self.enable_simple_timelapse and milkyway_timelapse_generator and not self._stop_event.is_set():
                     self.log_message.emit("-" * 60)
                     self.log_message.emit("正在生成银河延时视频...")
                     logger.info(f"-" * 60)
@@ -397,7 +406,9 @@ class ProcessThread(QThread):
                     milkyway_timelapse_start = time.time()
 
                     try:
-                        success = milkyway_timelapse_generator.generate_video(cleanup=True)
+                        success = milkyway_timelapse_generator.generate_video(cleanup=True, stop_event=self._stop_event)
+                        if self._stop_event.is_set():
+                            raise ProcessingCancelledError("用户取消了银河延时生成")
 
                         if success:
                             milkyway_timelapse_duration = time.time() - milkyway_timelapse_start
@@ -410,6 +421,8 @@ class ProcessThread(QThread):
                         else:
                             self.log_message.emit("❌ 银河延时视频生成失败")
                             logger.error("银河延时视频生成失败")
+                    except ProcessingCancelledError:
+                        raise
                     except Exception as e:
                         self.log_message.emit(f"❌ 银河延时视频生成失败: {str(e)}")
                         logger.error(f"银河延时视频生成失败: {e}")
@@ -429,10 +442,16 @@ class ProcessThread(QThread):
                     self.log_message.emit(f"✅ 所有 {total} 个文件处理成功！")
                     logger.info(f"所有 {total} 个文件处理成功")
 
+                if self._stop_event.is_set():
+                    raise ProcessingCancelledError("用户取消了结果保存前流程")
+
                 self.log_message.emit("=" * 60)
                 logger.info(f"=" * 60)
                 self.finished.emit(result)
 
+        except ProcessingCancelledError as e:
+            logger.info(f"处理已取消: {e}")
+            self.log_message.emit("⏹️ 已取消当前任务")
         except Exception as e:
             logger.error(f"处理失败: {e}")
             import traceback
@@ -679,7 +698,7 @@ class MainWindow(QMainWindow):
             output_dir=output_dir,
             video_fps=video_fps,
             translator=self.tr,
-            enable_satellite_removal=True,
+            enable_satellite_removal=self.params_panel.is_satellite_removal_enabled(),
             rotation=self.file_list_panel.get_rotation(),
             mask_path=self.file_list_panel.get_mask_path(),
             fg_mode=self.params_panel.get_fg_mode(),

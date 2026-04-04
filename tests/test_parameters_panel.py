@@ -55,6 +55,11 @@ class TestParametersPanel(unittest.TestCase):
         self.assertFalse(panel.is_timelapse_enabled())
         self.assertFalse(panel.is_simple_timelapse_enabled())
 
+    def test_satellite_removal_disabled_by_default(self):
+        """去划痕默认应关闭"""
+        panel = ParametersPanel(Translator("zh_CN"))
+        self.assertFalse(panel.is_satellite_removal_enabled())
+
     def test_comet_fade_factor_values(self):
         """彗星衰减因子映射正确"""
         panel = ParametersPanel(Translator("zh_CN"))

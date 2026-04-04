@@ -176,7 +176,7 @@ class FileListPanel(QWidget):
         folder_path = Path(folder)
         
         # 定义支持的扩展名
-        raw_extensions = {'.cr2', '.nef', '.arw', '.dng', '.orf', '.rw2', '.raf', '.crw', '.cr3'}
+        raw_extensions = {'.cr2', '.nef', '.arw', '.dng', '.orf', '.rw2', '.raf'}
         jpg_extensions = {'.jpg', '.jpeg'}
         
         # 扫描文件夹中的文件（排除隐藏文件）
@@ -218,10 +218,16 @@ class FileListPanel(QWidget):
             
             msg_box.exec_()
             
+            # 无对应 RAW 的 JPG-only 文件，以及无对应 JPG 的 RAW-only 文件，始终保留
+            raw_only = [f for f in raw_files if f.stem not in jpg_stems]
+            jpg_only = [f for f in jpg_files if f.stem not in raw_stems]
+
             if msg_box.clickedButton() == btn_raw:
-                files = raw_files
+                # 有对的取 RAW，JPG-only 文件保留
+                files = sorted(raw_files + jpg_only, key=lambda x: x.name)
             else:
-                files = jpg_files
+                # 有对的取 JPG，RAW-only 文件保留
+                files = sorted(jpg_files + raw_only, key=lambda x: x.name)
         else:
             # 没有同名对，合并所有文件
             if raw_files and jpg_files:
@@ -390,9 +396,6 @@ class FileListPanel(QWidget):
         angle_map = {0: 0, 1: 90, 2: 180, 3: 270}
         self._rotation = angle_map[index]
         self.rotation_changed.emit(self._rotation)
-        # 刷新当前预览图
-        if self.raw_files:
-            self.file_clicked.emit(self.raw_files[0])
 
     def has_files(self) -> bool:
         """检查是否有可处理的文件"""
