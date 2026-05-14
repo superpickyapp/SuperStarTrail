@@ -42,7 +42,7 @@
 
 Copyright © 2024-2025 James Photography
 版本：0.5.1
-网站：https://github.com/yourusername/SuperStarTrail
+网站：https://github.com/jamesphotography/SuperStarTrail
 电子邮件：James@jamesphotography.com.au
 
 ==================================================
